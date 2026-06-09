@@ -203,7 +203,8 @@ async def fetch_data_protection_table() -> list[dict]:
 
     Returns a list of row dicts; empty list on any fetch/parse failure.
     """
-    cached = cache_get("data_protection", "active_v1")
+    # v2 key: invalidates any stale active_v1 entries that were cached as empty []
+    cached = cache_get("data_protection", "active_v2")
     if cached is not None:
         return cached
 
@@ -229,12 +230,16 @@ async def fetch_data_protection_table() -> list[dict]:
     rows = _parse_data_protection_table(table)
     if not rows:
         logger.error(
-            "Data protection register: parsed 0 active rows — the table selector or "
-            "column layout has likely changed. URL: %s", _REGISTER_URL,
+            "Data protection register: parsed 0 active rows — table selector or "
+            "column layout may have changed. NOT caching (will retry). URL: %s",
+            _REGISTER_URL,
         )
-    else:
-        logger.info("Data protection register: %d active rows loaded", len(rows))
-    cache_set("data_protection", "active_v1", rows, ttl=60 * 60 * 24)
+        # Do NOT cache an empty result — it would poison the cache for 24 h and
+        # silence all data-protection lookups until the TTL expires.
+        return []
+    logger.info("Data protection register: %d active rows loaded", len(rows))
+    print(f"[data_protection] Active row count: {len(rows)}")
+    cache_set("data_protection", "active_v2", rows, ttl=60 * 60 * 24)
     return rows
 
 

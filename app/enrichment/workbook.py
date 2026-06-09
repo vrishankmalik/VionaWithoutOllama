@@ -27,10 +27,13 @@ CLI:
 from __future__ import annotations
 
 import io
+import logging
 import re
 from typing import Any, Optional
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from app.enrichment.data_protection import (
     _match_data_protection_deterministic,
@@ -173,6 +176,73 @@ def _get_dp_cols(
     return blank
 
 
+def _col_is_all_empty(series: pd.Series) -> bool:
+    """True iff every value in the series is None/NaN/empty string/whitespace.
+
+    Sentinel strings ("No NOC record", "No PM available", "Not in PM", …) are
+    NOT empty — they carry real information and prevent the column from dropping.
+    """
+    for val in series:
+        if val is None:
+            continue
+        try:
+            if pd.isna(val):
+                continue
+        except (TypeError, ValueError):
+            pass
+        s = str(val).strip()
+        if not s or s.lower() in ("none", "nan"):
+            continue
+        # Has at least one real value (including any sentinel string)
+        return False
+    return True
+
+
+def _drop_empty_sheet1_cols(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop all-empty columns from Sheet 1 before writing.
+
+    Patent groups (patent_N_number + 3 date cols) are evaluated and dropped as
+    a unit: only when ALL four columns in the group are all-empty for all rows.
+    This keeps layout aligned when some patents have numbers but missing dates.
+
+    All other columns are dropped individually when all-empty.
+
+    "Empty" means None/NaN/''/whitespace only.  Sentinels like
+    'No NOC record', 'No PM available', 'Not in PM' count as REAL data.
+    """
+    if df.empty:
+        return df
+
+    cols_to_drop: list[str] = []
+    patent_group_cols: set[str] = set()
+
+    # 1. Patent groups — drop only if the whole group is all-empty
+    pat_nums = sorted({
+        int(m.group(1))
+        for c in df.columns
+        if (m := re.match(r"^patent_(\d+)_", c))
+    })
+    for n in pat_nums:
+        grp = [c for c in df.columns if c.startswith(f"patent_{n}_")]
+        patent_group_cols.update(grp)
+        if all(_col_is_all_empty(df[c]) for c in grp):
+            cols_to_drop.extend(grp)
+
+    # 2. Non-patent columns — drop individually if all-empty
+    for col in df.columns:
+        if col not in patent_group_cols and _col_is_all_empty(df[col]):
+            cols_to_drop.append(col)
+
+    if cols_to_drop:
+        logger.info(
+            "Dropping %d all-empty columns from Sheet 1: %s",
+            len(cols_to_drop), cols_to_drop,
+        )
+        print(f"[workbook] Dropping {len(cols_to_drop)} all-empty Sheet 1 columns: {cols_to_drop}")
+
+    return df.drop(columns=cols_to_drop)
+
+
 def build_sheet1(
     response: SearchResponse,
     dp_table: Optional[list[dict]] = None,
@@ -210,7 +280,8 @@ def build_sheet1(
 
     df = pd.DataFrame(rows)
     cols = ["din"] + [c for c in df.columns if c != "din"]
-    return df[cols].sort_values("din", kind="stable").reset_index(drop=True)
+    df = df[cols].sort_values("din", kind="stable").reset_index(drop=True)
+    return _drop_empty_sheet1_cols(df)
 
 
 # ── Sheet 2 helpers ───────────────────────────────────────────────────────────

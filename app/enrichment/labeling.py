@@ -38,11 +38,14 @@ CLI:
 from __future__ import annotations
 
 import asyncio
+import functools
+import hashlib
 import json
 import logging
 import re
 import time
-from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable, Optional
 
 import httpx
 from bs4 import BeautifulSoup
@@ -57,6 +60,47 @@ logger = logging.getLogger(__name__)
 
 _HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 _DPD_INFO_BASE = "https://health-products.canada.ca/dpd-bdpp/info"
+
+# ── Thread pool for CPU-bound PDF work ───────────────────────────────────────
+# pdfplumber and pytesseract are synchronous; running them in the event loop
+# blocks all concurrent labeling tasks.  A dedicated pool keeps the loop free.
+_PDF_THREAD_POOL = ThreadPoolExecutor(
+    max_workers=int(__import__("os").getenv("PDF_THREAD_WORKERS", "8")),
+    thread_name_prefix="labeling_pdf",
+)
+
+# ── Shared httpx client (connection pooling) ──────────────────────────────────
+# Creating a new AsyncClient per request means a fresh TCP+TLS handshake for
+# every DPD API call (~200 ms each × 450 calls = ~90 s wasted on cold runs).
+# A single shared client reuses connections: subsequent requests to the same
+# host skip the handshake and return in <20 ms.
+_shared_client: Optional[httpx.AsyncClient] = None
+_shared_client_lock = asyncio.Lock()
+
+
+async def _get_shared_client() -> httpx.AsyncClient:
+    global _shared_client
+    if _shared_client is not None and not _shared_client.is_closed:
+        return _shared_client
+    async with _shared_client_lock:
+        if _shared_client is None or _shared_client.is_closed:
+            _shared_client = httpx.AsyncClient(
+                timeout=HTTP_TIMEOUT,
+                limits=httpx.Limits(max_connections=40, max_keepalive_connections=20),
+                follow_redirects=True,
+            )
+        return _shared_client
+
+# ── Per-URL download deduplication ───────────────────────────────────────────
+# Multiple DINs sharing one Product Monograph URL would otherwise all start
+# an HTTP download before any finishes and caches the bytes.  A per-URL Lock
+# serialises them so only the first download is live; the rest get cache hits.
+_PDF_DL_LOCKS: dict[str, asyncio.Lock] = {}
+_PDF_DL_LOCKS_META = asyncio.Lock()
+
+# Per-URL extraction deduplication — same logic for the CPU-bound OCR step.
+_PDF_EXTRACT_LOCKS: dict[str, asyncio.Lock] = {}
+_PDF_EXTRACT_LOCKS_META = asyncio.Lock()
 
 NOT_IN_PM = "Not in PM"
 NOT_STATED = NOT_IN_PM        # alias used by tests and external callers
@@ -185,12 +229,11 @@ async def _fetch_active_ingredient_api(drug_code: int) -> Optional[str]:
         return cached or None
 
     try:
-        async with httpx.AsyncClient() as client:
-            r = await client.get(
+        client = await _get_shared_client()
+        r = await client.get(
                 f"{DPD_BASE}/activeingredient/",
                 params={"id": drug_code, "lang": "en", "type": "json"},
                 headers=_HEADERS,
-                timeout=HTTP_TIMEOUT,
             )
         if r.status_code != 200:
             return None
@@ -227,12 +270,11 @@ async def _fetch_packaging_api(drug_code: int) -> tuple[Optional[str], Optional[
         return d.get("pack_size") or None, d.get("pack_style") or None
 
     try:
-        async with httpx.AsyncClient() as client:
-            r = await client.get(
+        client = await _get_shared_client()
+        r = await client.get(
                 f"{DPD_BASE}/packaging/",
                 params={"id": drug_code, "type": "json"},
                 headers=_HEADERS,
-                timeout=HTTP_TIMEOUT,
             )
         if r.status_code != 200:
             logger.debug("packaging API returned %d for drug_code=%s", r.status_code, drug_code)
@@ -311,11 +353,10 @@ async def _scrape_dpd_info_page(drug_code: int) -> dict[str, Optional[str]]:
     result: dict[str, Optional[str]] = {"pdf_url": None, "pdf_date": None, "description": None}
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            r = await client.get(
+        client = await _get_shared_client()
+        r = await client.get(
                 page_url,
                 headers={"User-Agent": USER_AGENT, "Accept": "text/html"},
-                timeout=HTTP_TIMEOUT,
             )
         if r.status_code != 200:
             logger.debug("DPD info page HTTP %d for drug_code=%s", r.status_code, drug_code)
@@ -719,6 +760,59 @@ async def _query_ollama(section_text: str, page_num: int, field_group: str) -> d
         return {}
 
 
+# In-flight dedup for concurrent Ollama calls with identical section text.
+# Without this, N DINs sharing one PM would fire N simultaneous Ollama calls
+# for the same text, saturating the GPU and multiplying wall-clock N×.
+_OLLAMA_INFLIGHT: dict[str, "asyncio.Future[dict]"] = {}
+_OLLAMA_INFLIGHT_LOCK = asyncio.Lock()
+
+
+async def _query_ollama_cached(section_text: str, page_num: int, field_group: str) -> dict:
+    """_query_ollama with persistent cache + in-flight dedup keyed by section-text hash.
+
+    Two-level dedup:
+    1. Persistent SQLite cache (cross-run): subsequent exports of same drug skip Ollama entirely.
+    2. In-flight asyncio Future (within-run): concurrent DINs sharing identical PM text wait
+       for the first caller's result instead of all firing Ollama simultaneously.
+
+    TTL 7 days — PM text changes only on major label revisions.
+    """
+    key = f"{field_group}:{hashlib.sha256(section_text[:5000].encode()).hexdigest()}"
+
+    # Level 1: persistent cache hit → instant return
+    cached = cache_get("ollama_result", key)
+    if cached is not None:
+        return cached
+
+    # Level 2: in-flight dedup — if another coroutine is already querying Ollama for this
+    # exact text, wait for its result rather than firing a duplicate request.
+    async with _OLLAMA_INFLIGHT_LOCK:
+        if key in _OLLAMA_INFLIGHT:
+            fut: asyncio.Future[dict] = _OLLAMA_INFLIGHT[key]
+            is_leader = False
+        else:
+            loop = asyncio.get_event_loop()
+            fut = loop.create_future()
+            _OLLAMA_INFLIGHT[key] = fut
+            is_leader = True
+
+    if not is_leader:
+        return await asyncio.shield(fut)
+
+    try:
+        result = await _query_ollama(section_text, page_num, field_group)
+        if result:
+            cache_set("ollama_result", key, result, ttl=60 * 60 * 24 * 7)
+        fut.set_result(result)
+        return result
+    except Exception as exc:
+        fut.set_exception(exc)
+        raise
+    finally:
+        async with _OLLAMA_INFLIGHT_LOCK:
+            _OLLAMA_INFLIGHT.pop(key, None)
+
+
 def _apply_ollama_result(
     row: dict,
     ollama_out: dict,
@@ -1023,6 +1117,7 @@ async def parse_labeling_fields_async(
     pages: list[tuple[int, str]],
     din_strength: Optional[str],
     enable_llm: bool = True,
+    _ollama_precheck: Optional[bool] = None,
 ) -> dict:
     """Extract Stage 3 label fields from pre-extracted PDF pages.
 
@@ -1051,7 +1146,10 @@ async def parse_labeling_fields_async(
     desc_page = desc_section[0] if desc_section else s6_page
     desc_text = desc_section[1] if desc_section else s6_text
 
-    use_ollama = enable_llm and await _is_ollama_available()
+    if _ollama_precheck is not None:
+        use_ollama = enable_llm and _ollama_precheck
+    else:
+        use_ollama = enable_llm and await _is_ollama_available()
 
     if use_ollama:
         # --- Ollama path ---
@@ -1063,20 +1161,20 @@ async def parse_labeling_fields_async(
         if nm_match:
             excip_section_text = nm_match.group(0)
 
-        ollama_a = await _query_ollama(excip_section_text, s6_page or 1, "excipients")
+        ollama_a = await _query_ollama_cached(excip_section_text, s6_page or 1, "excipients")
         _apply_ollama_result(row, ollama_a, ["excipients_core", "excipients_coating", "preservatives"], s6_page)
 
         if din_strength and desc_text:
             norm = _normalize_strength(din_strength)
-            ollama_b = await _query_ollama(
+            ollama_b = await _query_ollama_cached(
                 f"Product: {norm}\n\n{desc_text}", desc_page or 1, "appearance"
             )
         else:
-            ollama_b = await _query_ollama(desc_text or s6_text, desc_page or 1, "appearance")
+            ollama_b = await _query_ollama_cached(desc_text or s6_text, desc_page or 1, "appearance")
         _apply_ollama_result(row, ollama_b, ["colour", "shape", "size_mm", "weight"], desc_page)
 
         if s13_text:
-            ollama_c = await _query_ollama(s13_text, s13_page or 1, "ph")
+            ollama_c = await _query_ollama_cached(s13_text, s13_page or 1, "ph")
             _apply_ollama_result(row, ollama_c, ["ph"], s13_page)
         else:
             row["ph"] = NOT_IN_PM
@@ -1189,11 +1287,15 @@ async def enrich_labeling(
             upsert_labeling(din, row)
             return row
 
-    # Stage 3: PDF extraction — OCR applied per-page when text layer is thin
+    # Stage 3: PDF extraction — OCR applied per-page when text layer is thin.
+    # _extract_text_async runs pdfplumber + Tesseract in a thread pool so the
+    # event loop stays free for concurrent labeling tasks; it also serialises
+    # concurrent callers sharing the same PDF URL via a per-URL Lock so the
+    # work is done exactly once and the second caller gets an OCR-cache hit.
     ocr_flag = ENABLE_OCR if enable_ocr is None else enable_ocr
     try:
         cache_key = pdf_url or f"pdf_bytes:{din}"
-        pages, ocr_used = _extract_text_with_ocr(
+        pages, ocr_used = await _extract_text_async(
             pdf_bytes, cache_key=cache_key, enable_ocr=ocr_flag,
         )
     except ImportError:
@@ -1244,31 +1346,266 @@ async def enrich_labeling_batch(
     return dict(zip(din_map.keys(), results))
 
 
+async def _extract_text_async(
+    pdf_bytes: bytes,
+    cache_key: str,
+    enable_ocr: bool = True,
+) -> tuple[list[tuple[int, str]], bool]:
+    """Thread-pool + per-URL-dedup wrapper for _extract_text_with_ocr.
+
+    Two speedups in one:
+    1. Thread pool: pdfplumber/Tesseract run in _PDF_THREAD_POOL so the event
+       loop stays responsive to other concurrent labeling tasks.
+    2. Per-URL serialisation: if two coroutines request the same cache_key
+       concurrently, only the first runs the extraction; the second blocks on
+       the per-URL Lock, then gets a fast OCR-cache hit when it runs.
+
+    Output is byte-for-byte identical to _extract_text_with_ocr — same
+    pdfplumber calls, same Tesseract invocations, same cache reads/writes.
+    """
+    loop = asyncio.get_running_loop()
+
+    if not cache_key:
+        # No URL key (test-injected bytes with empty key) — no dedup needed.
+        return await loop.run_in_executor(
+            _PDF_THREAD_POOL,
+            functools.partial(_extract_text_with_ocr, pdf_bytes, cache_key, enable_ocr),
+        )
+
+    # Acquire a per-URL lock to serialise concurrent extractions for the same
+    # PDF URL.  The lock is created lazily under a module-level meta-lock.
+    async with _PDF_EXTRACT_LOCKS_META:
+        if cache_key not in _PDF_EXTRACT_LOCKS:
+            _PDF_EXTRACT_LOCKS[cache_key] = asyncio.Lock()
+        url_lock = _PDF_EXTRACT_LOCKS[cache_key]
+
+    async with url_lock:
+        # _extract_text_with_ocr checks the OCR text cache at its own start;
+        # a second caller will hit that cache immediately and return in <1 ms.
+        return await loop.run_in_executor(
+            _PDF_THREAD_POOL,
+            functools.partial(_extract_text_with_ocr, pdf_bytes, cache_key, enable_ocr),
+        )
+
+
+async def enrich_labeling_batch_fast(
+    din_map: dict[str, tuple[int, Optional[str]]],
+    enable_ocr: Optional[bool] = None,
+    enable_llm: bool = True,
+    concurrency: int = 8,
+    on_progress: Optional[Callable] = None,
+) -> dict[str, Optional[dict]]:
+    """Fast batch labeling with two levels of deduplication.
+
+    Speedup 1 — deduplicate by drug_code:
+      Multiple DINs can share one drug_code (different strengths of the same
+      product).  Stage 2 DPD API calls (active ingredient, packaging, info page)
+      are made once per unique drug_code, not once per DIN.
+
+    Speedup 2 — deduplicate by pdf_url:
+      DINs sharing the same Product Monograph URL trigger one PDF download and
+      one pdfplumber/OCR extraction pass.  parse_labeling_fields_async() is
+      then called per-DIN with its specific strength so per-strength appearance
+      fields (colour, shape, size) are extracted correctly.
+
+    Speedup 3 — thread pool (via _extract_text_async):
+      PDF extraction is CPU-bound and synchronous.  Running it in the thread
+      pool unblocks the event loop for concurrent PDF downloads and API calls.
+
+    Output is identical to calling enrich_labeling() for each DIN individually —
+    same Stage 2 → Stage 3 merge logic, same store writes, same sentinels.
+    """
+    if not din_map:
+        return {}
+
+    ocr_flag = ENABLE_OCR if enable_ocr is None else enable_ocr
+    results: dict[str, Optional[dict]] = {}
+    done_count = 0
+    done_lock = asyncio.Lock()
+
+    # ── Step 1: fetch Stage 2 data, deduplicating by drug_code ───────────────
+    unique_drug_codes = {dc for dc, _ in din_map.values()}
+    stage2_by_dc: dict[int, dict] = {}
+
+    async def _fetch_s2(dc: int) -> None:
+        stage2_by_dc[dc] = await fetch_stage2_data(dc)
+
+    await asyncio.gather(*[_fetch_s2(dc) for dc in unique_drug_codes])
+
+    # ── Step 2: group DINs by pdf_url ─────────────────────────────────────────
+    # Key: pdf_url (str) or None for DINs with no PM.
+    # Value: list of (din, drug_code, strength) triples.
+    pdf_url_groups: dict[Optional[str], list[tuple[str, int, Optional[str]]]] = {}
+    for din, (drug_code, strength) in din_map.items():
+        pdf_url = stage2_by_dc.get(drug_code, {}).get("pdf_url")
+        pdf_url_groups.setdefault(pdf_url, []).append((din, drug_code, strength))
+
+    # Check Ollama availability once for the entire batch (avoid N concurrent
+    # GET /api/tags pings; one result is consistent for all DINs in this run).
+    use_llm = enable_llm and await _is_ollama_available()
+
+    # ── Step 3: bounded concurrent processing, one task per unique pdf_url ────
+    pdf_sem = asyncio.Semaphore(concurrency)
+
+    async def _process_group(
+        pdf_url: Optional[str],
+        dins_in_group: list[tuple[str, int, Optional[str]]],
+    ) -> None:
+        nonlocal done_count
+        async with pdf_sem:
+            await _process_pdf_group(pdf_url, dins_in_group)
+
+    async def _process_pdf_group(
+        pdf_url: Optional[str],
+        dins_in_group: list[tuple[str, int, Optional[str]]],
+    ) -> None:
+        nonlocal done_count
+
+        # ── No PM path ────────────────────────────────────────────────────────
+        pdf_bytes: Optional[bytes] = None
+        if pdf_url:
+            pdf_bytes = await _download_pdf(pdf_url)
+
+        if pdf_bytes is None:
+            # Stage 2 data only — identical logic to the no-PM branch in enrich_labeling().
+            for din, drug_code, _strength in dins_in_group:
+                s2 = _stage2_fields_only(stage2_by_dc.get(drug_code, {}))
+                row: dict = {}
+                for field in _LABELING_FIELDS:
+                    if field in _STAGE2_FIELDS:
+                        val = s2.get(field)
+                        row[field] = val if val else NO_PM_AVAILABLE
+                        row[f"{field}_page"] = None
+                    else:
+                        row[field] = NO_PM_AVAILABLE
+                        row[f"{field}_page"] = None
+                row["needs_ocr"] = 0
+                row["has_unverified"] = 0
+                row["drug_code"] = drug_code
+                upsert_labeling(din, row)
+                results[din] = row
+                await _tick_progress(din)
+            return
+
+        # ── PDF path: extract text once, parse per-DIN ────────────────────────
+        cache_key = pdf_url or f"pdf_bytes:{dins_in_group[0][0]}"
+        try:
+            pages, ocr_used = await _extract_text_async(
+                pdf_bytes, cache_key=cache_key, enable_ocr=ocr_flag,
+            )
+        except ImportError:
+            logger.error("pdfplumber not installed — cannot extract labeling fields.")
+            for din, dc, _ in dins_in_group:
+                results[din] = None
+                await _tick_progress(din)
+            return
+        except Exception as exc:
+            logger.warning("PDF parse failed for url=%s: %s", pdf_url, exc)
+            for din, dc, _ in dins_in_group:
+                results[din] = None
+                await _tick_progress(din)
+            return
+
+        # parse_labeling_fields_async is async (Ollama queries) but fast (regex
+        # fallback) — run all DINs in this group concurrently.
+        async def _parse_one(din: str, drug_code: int, strength: Optional[str]) -> None:
+            s2 = _stage2_fields_only(stage2_by_dc.get(drug_code, {}))
+            pdf_row = await parse_labeling_fields_async(
+                pages, strength, enable_llm=use_llm, _ollama_precheck=use_llm,
+            )
+            if ocr_used:
+                pdf_row["needs_ocr"] = 1
+                logger.info("din=%s: OCR was used for at least one page → needs_ocr=1", din)
+
+            # Merge: Stage 2 API values override Stage 3 PDF values (authoritative).
+            final_row = dict(pdf_row)
+            for field in _STAGE2_FIELDS:
+                api_val = s2.get(field)
+                if api_val:
+                    final_row[field] = api_val
+                    final_row[f"{field}_page"] = None
+                else:
+                    logger.info(
+                        "Stage 2 API empty for %s din=%s drug_code=%s — PDF value kept: %r",
+                        field, din, drug_code, final_row.get(field),
+                    )
+            final_row["drug_code"] = drug_code
+            if pdf_url:
+                final_row["pdf_url"] = pdf_url
+
+            upsert_labeling(din, final_row)
+            results[din] = final_row
+            await _tick_progress(din)
+
+        await asyncio.gather(*[_parse_one(d, dc, st) for d, dc, st in dins_in_group])
+
+    async def _tick_progress(din: str) -> None:
+        nonlocal done_count
+        async with done_lock:
+            done_count += 1
+            dc = done_count
+        if on_progress is not None:
+            cb = on_progress(dc, len(din_map), din)
+            if asyncio.iscoroutine(cb):
+                await cb
+
+    await asyncio.gather(*[
+        _process_group(pdf_url, dins)
+        for pdf_url, dins in pdf_url_groups.items()
+    ])
+
+    return results
+
+
+def _stage2_fields_only(stage2: dict) -> dict:
+    """Return a copy of stage2 with only the mergeable fields (drops pdf_url etc.)."""
+    s2 = dict(stage2)
+    s2.pop("pdf_url", None)
+    s2.pop("pdf_date", None)
+    s2.pop("description", None)
+    return s2
+
+
 async def _download_pdf(url: str) -> Optional[bytes]:
+    import base64
     cache_key = f"pdf:{url}"
+
+    # Fast path — avoid acquiring the per-URL lock if already cached.
     cached = cache_get("labeling_pdf", cache_key)
     if cached is not None:
-        import base64
         return base64.b64decode(cached)
 
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+    # Slow path: serialise concurrent downloads for the same URL so only
+    # the first request hits the network; the rest get a cache hit on retry.
+    async with _PDF_DL_LOCKS_META:
+        if url not in _PDF_DL_LOCKS:
+            _PDF_DL_LOCKS[url] = asyncio.Lock()
+        url_lock = _PDF_DL_LOCKS[url]
+
+    async with url_lock:
+        # Re-check after acquiring the lock — another coroutine may have
+        # downloaded and cached the PDF while we were waiting.
+        cached = cache_get("labeling_pdf", cache_key)
+        if cached is not None:
+            return base64.b64decode(cached)
+
+        try:
+            client = await _get_shared_client()
             r = await client.get(
-                url,
-                headers={"User-Agent": USER_AGENT},
-                timeout=60.0,
-            )
-        if r.status_code != 200:
-            logger.warning("PDF download HTTP %d for %s", r.status_code, url)
+                    url,
+                    headers={"User-Agent": USER_AGENT},
+                    timeout=60.0,
+                )
+            if r.status_code != 200:
+                logger.warning("PDF download HTTP %d for %s", r.status_code, url)
+                return None
+            pdf_bytes = r.content
+            cache_set("labeling_pdf", cache_key, base64.b64encode(pdf_bytes).decode(),
+                      ttl=60 * 60 * 24 * 7)
+            return pdf_bytes
+        except Exception as exc:
+            logger.warning("PDF download failed for %s: %s", url, exc)
             return None
-        pdf_bytes = r.content
-        import base64
-        cache_set("labeling_pdf", cache_key, base64.b64encode(pdf_bytes).decode(),
-                  ttl=60 * 60 * 24 * 7)
-        return pdf_bytes
-    except Exception as exc:
-        logger.warning("PDF download failed for %s: %s", url, exc)
-        return None
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

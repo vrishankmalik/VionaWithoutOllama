@@ -55,8 +55,15 @@ _CPD_BASE = "https://brevets-patents.ic.gc.ca/opic-cipo/cpd/eng/patent"
 
 _DATE_FIELDS = ("filing_date", "grant_date", "expiry_date")
 
-# Rate-limit: no more than 3 concurrent CPD fetches
-_DETAIL_SEM = asyncio.Semaphore(3)
+# CPD is currently broken (instant 308 redirect to bare IP) so fetches return
+# immediately.  Raise to 20 so the fast-fail path doesn't serialise 222 patents.
+_DETAIL_SEM = asyncio.Semaphore(20)
+
+# In-flight dedup: many DINs share the same patent number.  Without this,
+# 222 DINs with the same patent would fire 222 concurrent CPD fetches.
+# Each waiter shares the first caller's result via a Future.
+_PATENT_DETAIL_INFLIGHT: dict[str, "asyncio.Future[dict]"] = {}
+_PATENT_DETAIL_INFLIGHT_LOCK = asyncio.Lock()
 
 # Earliest date of 20-year patent term rule in Canada
 _TWENTY_YEAR_CUTOFF = datetime(1989, 10, 1)
@@ -225,7 +232,7 @@ async def _fetch_cpd_dates(patent_number: str) -> dict[str, Optional[str]]:
                 r = await client.get(
                     url,
                     headers={"User-Agent": USER_AGENT, "Accept": "text/html"},
-                    timeout=HTTP_TIMEOUT,
+                    timeout=5.0,  # CPD is broken (timeout/redirect) — fail fast
                 )
             # The CPD server currently issues a 308 redirect to a bare IP address
             # (https://<IP>/) with no path — following it causes a 20-second timeout
@@ -353,6 +360,11 @@ async def fetch_patent_detail(
     Primary source: CPD summary page.
     Fallback: PR-RDB detail page (legacy, dates often absent there).
     Result is cached by patent_number.
+
+    In-flight dedup: many DINs share the same patent; without this each DIN fires
+    a separate CPD fetch for the same patent number, serialised by _DETAIL_SEM(3).
+    For 222 DINs with the same LIPITOR patent at 20s CPD timeout each = 25 minutes.
+    With dedup: one fetch per unique patent_number; all other callers wait on the Future.
     """
     # v2: busts stale all-None entries cached when CPD was timing out
     cache_key = f"cpd_detail_v2:{patent_number}"
@@ -360,23 +372,46 @@ async def fetch_patent_detail(
     if cached is not None:
         return cached
 
-    # Primary: CPD
-    result = await _fetch_cpd_dates(patent_number)
+    # In-flight dedup — if another coroutine is already fetching this patent, wait for it.
+    async with _PATENT_DETAIL_INFLIGHT_LOCK:
+        if patent_number in _PATENT_DETAIL_INFLIGHT:
+            fut: asyncio.Future[dict] = _PATENT_DETAIL_INFLIGHT[patent_number]
+            is_leader = False
+        else:
+            loop = asyncio.get_event_loop()
+            fut = loop.create_future()
+            _PATENT_DETAIL_INFLIGHT[patent_number] = fut
+            is_leader = True
 
-    # Fallback: if CPD returned nothing, try PR-RDB
-    if all(result.get(k) is None for k in _DATE_FIELDS):
-        pr_dates = await _fetch_pr_detail_dates(patent_number, session_id)
-        for field in _DATE_FIELDS:
-            if pr_dates.get(field):
-                result[field] = pr_dates[field]
+    if not is_leader:
+        return await asyncio.shield(fut)
+
+    try:
+        # Primary: CPD
+        result = await _fetch_cpd_dates(patent_number)
+
+        # Fallback: if CPD returned nothing, try PR-RDB
+        if all(result.get(k) is None for k in _DATE_FIELDS):
+            pr_dates = await _fetch_pr_detail_dates(patent_number, session_id)
+            for field in _DATE_FIELDS:
+                if pr_dates.get(field):
+                    result[field] = pr_dates[field]
+            if any(result.get(k) for k in _DATE_FIELDS):
+                logger.info("Patent %s: CPD had no dates; used PR-RDB fallback", patent_number)
+
+        # Only cache when we have at least one real date — a transient failure (CPD
+        # redirect, network error) must not poison the cache with all-None results.
         if any(result.get(k) for k in _DATE_FIELDS):
-            logger.info("Patent %s: CPD had no dates; used PR-RDB fallback", patent_number)
+            cache_set("patent_detail", cache_key, result)
 
-    # Only cache when we have at least one real date — a transient failure (CPD
-    # redirect, network error) must not poison the cache with all-None results.
-    if any(result.get(k) for k in _DATE_FIELDS):
-        cache_set("patent_detail", cache_key, result)
-    return result
+        fut.set_result(result)
+        return result
+    except Exception as exc:
+        fut.set_exception(exc)
+        raise
+    finally:
+        async with _PATENT_DETAIL_INFLIGHT_LOCK:
+            _PATENT_DETAIL_INFLIGHT.pop(patent_number, None)
 
 
 # ── Patent.zip bulk data ──────────────────────────────────────────────────────
@@ -554,6 +589,45 @@ async def load_patent_zip_din_map() -> dict[str, list[str]]:
     return result
 
 
+async def load_patent_zip_both() -> tuple[dict[str, dict], dict[str, list[str]]]:
+    """Download Patent.zip ONCE and return (by_patent_number, by_din) maps.
+
+    Both load_patent_zip() and load_patent_zip_din_map() previously downloaded
+    the same ~20 MB ZIP file independently on a cold cache — this function
+    checks both caches first and issues at most one HTTP request.
+    """
+    by_patent: Optional[dict] = cache_get("patent_zip", "bulk_v2")
+    by_din: Optional[dict] = cache_get("patent_zip_din_map", "v1")
+    if by_patent is not None and by_din is not None:
+        logger.debug("Patent.zip: both caches warm — no download needed")
+        return by_patent, by_din
+
+    missing = [k for k, v in [("bulk_v2", by_patent), ("v1", by_din)] if v is None]
+    logger.info("Patent.zip: downloading once for missing cache key(s): %s", missing)
+    try:
+        async with httpx.AsyncClient(verify=False) as client:  # noqa: S501
+            r = await client.get(
+                _PATENT_ZIP_URL,
+                headers={"User-Agent": USER_AGENT},
+                timeout=120.0,
+                follow_redirects=True,
+            )
+            r.raise_for_status()
+            zip_bytes = r.content
+    except Exception as exc:
+        logger.warning("Patent.zip combined download failed: %s", exc)
+        return by_patent or {}, by_din or {}
+
+    if by_patent is None:
+        by_patent = _parse_patent_zip(zip_bytes)  # cache_set done inside _parse_patent_zip
+
+    if by_din is None:
+        by_din = _parse_patent_zip_by_din(zip_bytes)
+        cache_set("patent_zip_din_map", "v1", by_din, ttl=60 * 60 * 24)
+
+    return by_patent, by_din
+
+
 # ── DIN → patent number mapping ───────────────────────────────────────────────
 
 async def _din_to_patent_numbers(
@@ -622,36 +696,45 @@ async def enrich_patents(
     if not dins:
         return {}
 
+    # Skip DINs already enriched (have at least one patent row in the store).
+    # This makes enrich_patents idempotent: a second call for the same DIN is a
+    # no-op so concurrent export paths don't overwrite each other's data.
+    unenriched = [d for d in dins if not get_patents_for_din(d)]
+    already_enriched = [d for d in dins if d not in set(unenriched)]
+    if already_enriched:
+        logger.debug(
+            "enrich_patents: skipping %d already-stored DINs: %s",
+            len(already_enriched), already_enriched[:10],
+        )
+    if not unenriched:
+        return {din: get_patents_for_din(din) for din in dins}
+
     session_id = ""
     try:
         _, _, session_id = await _pr_get_session()
     except Exception as exc:
         logger.warning("Could not obtain Patent Register session: %s", exc)
 
-    # Download Patent.zip for BOTH uses: by-patent (date cross-check) and by-DIN (mapping).
-    zip_task = asyncio.create_task(load_patent_zip())
-    zip_din_task = asyncio.create_task(load_patent_zip_din_map())
-
-    # Wait for the DIN map first — used to drive the per-DIN lookups.
-    zip_by_din = await zip_din_task
+    # Download Patent.zip ONCE for both uses: by-patent (date cross-check) and by-DIN (mapping).
+    # load_patent_zip_both() issues at most one HTTP request even on a cold cache, replacing the
+    # previous two independent download tasks (zip_task + zip_din_task) that each fetched ~20 MB.
+    zip_data, zip_by_din = await load_patent_zip_both()
 
     # DIN → patent numbers (Patent.zip primary, PR-RDB fallback)
     din_patent_map: dict[str, list[str]] = {}
     for din, patents in zip(
-        dins,
-        await asyncio.gather(*[_din_to_patent_numbers(d, session_id, zip_by_din or None) for d in dins]),
+        unenriched,
+        await asyncio.gather(*[_din_to_patent_numbers(d, session_id, zip_by_din or None) for d in unenriched]),
     ):
         if patents:
             din_patent_map[din] = patents
 
-    zero_patent_dins = [d for d in dins if d not in din_patent_map]
+    zero_patent_dins = [d for d in unenriched if d not in din_patent_map]
     if zero_patent_dins:
         logger.info(
             "DINs with 0 patents (generic / off-patent / linkage check needed): %s",
             zero_patent_dins,
         )
-
-    zip_data = await zip_task
 
     # Enrich each (DIN, patent_number) pair using CPD dates
     pairs = [(din, pn) for din, pns in din_patent_map.items() for pn in pns]

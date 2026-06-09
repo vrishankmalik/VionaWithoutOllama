@@ -7,11 +7,13 @@ Covers:
   - Offline fallback: Ollama unavailable → deterministic path used
   - No match → empty dict (no fabrication)
   - Async match_data_protection with mocked Ollama online/offline
+  - Regression: empty parse result not cached (Bug 1)
+  - Round-trip canary: parsed rows feed back through matcher correctly
 """
 from __future__ import annotations
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 # ── Normalisation ─────────────────────────────────────────────────────────────
@@ -296,3 +298,100 @@ def test_medicinal_ingredient_column_not_overwritten_by_containing_drug_column()
     assert rows[0]["manufacturer"] == "Merck Canada Inc."
     assert rows[0]["no_file_date"] == "2032-01-30"
     assert rows[0]["data_protection_ends"] == "2034-07-30"
+
+
+# ── Regression: Bug 1 — empty parse result must not be cached ─────────────────
+
+@pytest.mark.asyncio
+async def test_empty_parse_not_cached():
+    """If the register page parses to 0 rows, the result must NOT be cached.
+
+    A previous version called cache_set unconditionally, so an empty-parse
+    result would poison the cache for 24 h, silencing all DP lookups until
+    expiry.  This test fails if cache_set is called with an empty list.
+    """
+    from app.enrichment import data_protection as dp_mod
+
+    # Build HTML that fools _find_active_table (id="a1" on table) but whose
+    # rows all have empty medicinal_ingredient → _parse returns 0 rows.
+    empty_table_html = """
+    <html><body>
+      <table id="a1">
+        <tr>
+          <th>Medicinal Ingredient(s)</th><th>Manufacturer</th>
+          <th>6 Year No File Date</th><th>Pediatric Extension Yes/No</th>
+          <th>Data Protection Ends</th>
+        </tr>
+      </table>
+    </body></html>
+    """
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.text = empty_table_html
+
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    cache_set_calls: list = []
+
+    def _spy_cache_set(source, query, data, ttl=None):
+        cache_set_calls.append((source, query, data))
+
+    with (
+        patch.object(dp_mod, "cache_get", return_value=None),
+        patch.object(dp_mod, "cache_set", side_effect=_spy_cache_set),
+        patch("app.enrichment.data_protection.httpx.AsyncClient", return_value=mock_client),
+    ):
+        result = await dp_mod.fetch_data_protection_table()
+
+    assert result == [], "Expected empty list from a parse that found 0 rows"
+    # The fix: empty results must NOT be cached
+    assert not any(
+        data == [] for _src, _q, data in cache_set_calls
+    ), (
+        "cache_set must never be called with an empty list — that would poison "
+        "the cache for 24 h and blank every row's data-protection columns.\n"
+        f"Actual cache_set calls: {cache_set_calls}"
+    )
+
+
+def test_round_trip_canary():
+    """Take a row from _SAMPLE_TABLE, feed it through the matcher, verify it
+    returns.  This is the offline canary: if the Active table ever parses to 0
+    rows in production, the round-trip will silently return {} for every DIN.
+    Keeping this test green ensures the matching path itself is not broken.
+    """
+    from app.enrichment.data_protection import _match_data_protection_deterministic
+
+    assert len(_SAMPLE_TABLE) > 0, (
+        "CANARY FAIL: _SAMPLE_TABLE is empty — test fixture is broken"
+    )
+
+    # Round-trip: ingredient + manufacturer straight from the table
+    row = _SAMPLE_TABLE[0]
+    result = _match_data_protection_deterministic(
+        row["medicinal_ingredient"],
+        row["manufacturer"],
+        _SAMPLE_TABLE,
+    )
+
+    print(f"[canary] Active row count: {len(_SAMPLE_TABLE)} > 0 (OK)")
+    print(f"[canary] Round-trip result: {result}")
+
+    assert result != {}, (
+        f"CANARY FAIL: round-trip returned empty dict for "
+        f"ingredient={row['medicinal_ingredient']!r}, "
+        f"manufacturer={row['manufacturer']!r}"
+    )
+    assert result["dp_6yr_no_file_date"] == row["no_file_date"], (
+        f"Expected dp_6yr_no_file_date={row['no_file_date']!r}, "
+        f"got {result['dp_6yr_no_file_date']!r}"
+    )
+    assert result["data_protection_ends"] == row["data_protection_ends"]
+    # pediatric_extension must be 'Yes' or 'No' (never blank)
+    assert result["pediatric_extension"] in ("Yes", "No"), (
+        f"pediatric_extension must be Yes/No, got: {result['pediatric_extension']!r}"
+    )

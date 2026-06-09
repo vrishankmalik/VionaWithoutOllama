@@ -260,18 +260,37 @@ def test_columns_no_url_or_page(tmp_path):
 
 
 def test_drug_code_and_needs_ocr_present(tmp_path):
-    """_drug_code and needs_ocr must always be present in Sheet 1."""
+    """_drug_code and needs_ocr appear in Sheet 1 when data is present.
+
+    With Change 2 (drop all-empty columns), these columns only survive when they
+    have at least one non-empty value.  _drug_code requires a DPD record that
+    carries drug_code in source_specific; needs_ocr requires a labeling row.
+    """
+    import time
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
 
-    from tests.test_build_workbook import _dpd, _make_response
+    # Add labeling data so needs_ocr is non-None (False, not None).
+    store_mod.upsert_labeling("02498014", {
+        "needs_ocr": 0, "has_unverified": 0, "drug_code": 99001,
+        "fetched_at": time.time(),
+    })
+
+    from app.models import DrugRecord
+    from tests.test_build_workbook import _make_response
     from app.enrichment.workbook import build_sheet1
 
-    response = _make_response(dpd_records=[_dpd("02498014")])
+    # DPD record with drug_code so _drug_code column is non-None
+    rec = DrugRecord(
+        source="DPD", din="02498014", brand_name="PIQRAY",
+        company="Novartis", ingredient="alpelisib", strength="50 mg",
+        source_specific={"drug_code": 99001},
+    )
+    response = _make_response(dpd_records=[rec])
     df = build_sheet1(response)
 
-    assert "_drug_code" in df.columns, "_drug_code must be kept in output"
-    assert "needs_ocr" in df.columns, "needs_ocr must be kept in output"
+    assert "_drug_code" in df.columns, "_drug_code must be present when DPD provides drug_code"
+    assert "needs_ocr" in df.columns, "needs_ocr must be present when labeling data exists"
 
 
 def test_no_patent_numbers_cell_exceeds_8_chars(tmp_path):

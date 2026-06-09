@@ -201,12 +201,17 @@ def test_build_workbook_returns_xlsx():
     assert any("sheet" in n.lower() for n in names), "No worksheet files found in XLSX"
 
 
-def test_build_workbook_sheet1_has_patent_columns():
+def test_build_workbook_sheet1_has_patent_columns(tmp_path):
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    # Add a patent so the patent_1_* group isn't dropped by the all-empty cleanup
+    store_mod.upsert_patent("02498014", "2709025", "2008-12-10", "2014-08-26", "2028-12-10")
+
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(dpd_records=[_dpd("02498014")])
     df = build_sheet1(response)
-    # Wide patent columns must always be present (even when empty)
+    # Wide patent columns must be present (patent data was added)
     assert "patent_count" in df.columns, "patent_count missing"
     assert "patent_1_number" in df.columns, "patent_1_number missing"
     assert "patent_1_filing_date" in df.columns, "patent_1_filing_date missing"
@@ -216,7 +221,19 @@ def test_build_workbook_sheet1_has_patent_columns():
     assert "all_patents_detail" not in df.columns, "stale all_patents_detail column present"
 
 
-def test_build_workbook_sheet1_has_labeling_columns():
+def test_build_workbook_sheet1_has_labeling_columns(tmp_path):
+    import time
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    # Add minimal labeling data so labeling columns are not dropped by the
+    # all-empty cleanup (Change 2).  These sentinels are real values ("Not in PM"
+    # / "No PM available"), so the columns must be kept.
+    store_mod.upsert_labeling("02498014", {
+        "colour": "pink", "shape": "round", "ph": "Not stated",
+        "needs_ocr": 0, "has_unverified": 0, "drug_code": 99001,
+        "fetched_at": time.time(),
+    })
+
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(dpd_records=[_dpd("02498014")])
@@ -458,6 +475,99 @@ def test_no_pm_available_constant_exported():
     from app.enrichment.labeling import NO_PM_AVAILABLE, NOT_IN_PM
     assert NO_PM_AVAILABLE != NOT_IN_PM
     assert NO_PM_AVAILABLE == "No PM available"
+
+
+# ── Test 9: Change 2 — all-empty column cleanup ──────────────────────────────
+
+def test_empty_patent_groups_dropped(tmp_path):
+    """When no DIN has patents, all patent_N_* groups must be dropped.
+
+    patent_count stays (0 is a real integer value, not empty); the four-column
+    patent_1_* group is dropped because every cell is None.
+    """
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    # Do NOT add any patents → all patent_N_* cols will be None
+
+    from app.enrichment.workbook import build_sheet1
+
+    response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
+    df = build_sheet1(response)
+
+    # The four-column patent group must have been dropped
+    assert "patent_1_number" not in df.columns, (
+        "patent_1_number must be dropped when no DINs have patents"
+    )
+    assert "patent_1_filing_date" not in df.columns
+    assert "patent_1_grant_date" not in df.columns
+    assert "patent_1_expiry_date" not in df.columns
+    # patent_count is 0 (integer) → not empty → must stay
+    assert "patent_count" in df.columns, "patent_count must stay even when all counts are 0"
+
+
+def test_patent_group_kept_when_one_din_has_patent(tmp_path):
+    """When even one DIN has a patent, the patent_N_* group must be kept
+    for ALL rows (trailing DINs get None in those cols, which is correct)."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    store_mod.upsert_patent("02498014", "2709025", "2008-12-10", "2014-08-26", "2028-12-10")
+    # 02498022 has no patents but the group must still exist because 02498014 does
+
+    from app.enrichment.workbook import build_sheet1
+
+    response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
+    df = build_sheet1(response)
+
+    assert "patent_1_number" in df.columns, "patent_1_number must be kept (02498014 has a patent)"
+    row_with = df[df["din"] == "02498014"].iloc[0]
+    row_without = df[df["din"] == "02498022"].iloc[0]
+    assert row_with["patent_1_number"] == "2709025"
+    assert row_without["patent_1_number"] is None or str(row_without["patent_1_number"]) in (
+        "None", "nan", ""
+    )
+
+
+def test_sentinel_values_prevent_column_drop(tmp_path):
+    """Columns containing only sentinel strings ('No NOC record', 'No PM available')
+    must NOT be dropped — sentinels convey real information."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import build_sheet1
+
+    # DPD record only → noc_* columns get "No NOC record" sentinel
+    response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
+    df = build_sheet1(response)
+
+    # All rows have "No NOC record" in noc_brand_name — must NOT be dropped
+    assert "noc_brand_name" in df.columns, (
+        "noc_brand_name must be kept even when all values are the 'No NOC record' sentinel"
+    )
+    assert "noc_submission_type" in df.columns
+
+
+def test_single_nonempty_row_prevents_column_drop(tmp_path):
+    """A column with even one non-empty value must not be dropped,
+    even if all other rows are None."""
+    import time
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    # Give one DIN a labeling colour; other DIN has nothing
+    store_mod.upsert_labeling("02498014", {
+        "colour": "blue", "needs_ocr": 0, "has_unverified": 0,
+        "drug_code": 99001, "fetched_at": time.time(),
+    })
+    # 02498022 has no labeling → colour=None for that row
+
+    from app.enrichment.workbook import build_sheet1
+
+    response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
+    df = build_sheet1(response)
+
+    assert "colour" in df.columns, (
+        "colour must be kept: 02498014 has a non-empty value even though 02498022 is None"
+    )
 
 
 def test_export_never_produces_old_sheet_names():

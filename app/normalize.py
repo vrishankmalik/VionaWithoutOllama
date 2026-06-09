@@ -11,7 +11,8 @@ from typing import Optional
 
 import httpx
 
-from app.config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from app.cache import cache_get, cache_set
+from app.config import CACHE_TTL, OLLAMA_BASE_URL, OLLAMA_MODEL
 
 # Static synonym map — canonical form → list of synonyms (and vice versa)
 _STATIC_SYNONYMS: dict[str, list[str]] = {
@@ -133,6 +134,12 @@ async def normalize_ingredient(term: str) -> tuple[str, list[str]]:
     term = term.strip()
     key = term.lower()
 
+    # Fast path: if we have a cached synonym list (including any Ollama results from a
+    # prior run), return immediately — avoids a 10-15s Ollama round-trip on every export.
+    cached = cache_get("normalize_synonyms", key)
+    if cached is not None:
+        return term, cached
+
     # 1. Check static map
     static = _static_synonyms(key)
 
@@ -141,6 +148,9 @@ async def normalize_ingredient(term: str) -> tuple[str, list[str]]:
 
     # Combine and deduplicate
     all_extras = list({t.lower() for t in (static + ollama_terms)} - {key})
+
+    # Cache for the standard TTL.  An empty list is also valid (no synonyms found).
+    cache_set("normalize_synonyms", key, all_extras)
     return term, all_extras
 
 

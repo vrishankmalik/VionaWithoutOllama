@@ -22,7 +22,7 @@ from typing import Optional
 from app.config import ENABLE_OCR, SOURCE_TIMEOUT
 from app.consistency import check_cross_source_consistency
 from app.enrichment.data_protection import fetch_data_protection_table
-from app.enrichment.labeling import enrich_labeling
+from app.enrichment.labeling import enrich_labeling, enrich_labeling_batch_fast
 from app.enrichment.patents import enrich_patents
 from app.enrichment.store import get_labeling_for_din
 from app.enrichment.workbook import _is_excluded_din, build_workbook
@@ -191,7 +191,7 @@ async def run_export_job(
             })
 
         # ── Stage 3: Labeling ─────────────────────────────────────────────────
-        # Collect only DPD DINs not yet in the labeling store
+        # Collect only DPD DINs not yet in the labeling store.
         din_map: dict[str, tuple[int, Optional[str]]] = {}
         for s in sources:
             if s.source != "DPD":
@@ -209,7 +209,7 @@ async def run_export_job(
                 except (ValueError, TypeError):
                     pass
 
-        # DINs already in store count as cache hits
+        # DINs already in store count as cache hits.
         dpd_dins_total = sum(
             1 for s in sources if s.source == "DPD"
             for r in s.records
@@ -219,45 +219,42 @@ async def run_export_job(
         label_total = len(din_map)
         label_done_ref = [0]
         t_label = time.time()
-        label_sem = asyncio.Semaphore(_LABEL_SEM_SIZE)
-        label_lock = asyncio.Lock()
 
+        # Count unique pdf_urls to report deduplication stats in the log.
+        # (The actual dedup happens inside enrich_labeling_batch_fast.)
+        unique_drug_codes_count = len({dc for dc, _ in din_map.values()})
         await emit(job, {
             "stage": "Labeling", "done": 0, "total": label_total,
             "pct": _overall_pct("Labeling", 0, max(label_total, 1)),
             "elapsed_s": elapsed(), "eta_s": None,
             "log": (
                 f"Labeling: {label_total} new DINs to fetch "
-                f"({label_cache_hits} cache hits); "
+                f"({label_cache_hits} store cache hits, "
+                f"{unique_drug_codes_count} unique drug codes); "
                 f"ocr={'on' if enable_ocr else 'off'}, "
                 f"llm={'on' if enable_llm else 'off'}, "
                 f"concurrency={_LABEL_SEM_SIZE}"
             ),
         })
 
-        async def _enrich_one_label(din: str, drug_code: int, strength: Optional[str]) -> None:
-            async with label_sem:
-                await enrich_labeling(
-                    din, drug_code, strength,
-                    enable_ocr=enable_ocr,
-                    enable_llm=enable_llm,
-                )
-            async with label_lock:
-                label_done_ref[0] += 1
-                done = label_done_ref[0]
-            await emit(job, {
-                "stage": "Labeling", "done": done, "total": label_total,
-                "pct": _overall_pct("Labeling", done, max(label_total, 1)),
-                "elapsed_s": elapsed(),
-                "eta_s": _eta_s(t_label, done, label_total),
-                "log": f"DIN {din} labeling complete",
-            })
-
         if din_map:
-            await asyncio.gather(*[
-                _enrich_one_label(din, dc, st)
-                for din, (dc, st) in din_map.items()
-            ])
+            async def _on_label_progress(done: int, _total: int, din: str) -> None:
+                label_done_ref[0] = done
+                await emit(job, {
+                    "stage": "Labeling", "done": done, "total": label_total,
+                    "pct": _overall_pct("Labeling", done, max(label_total, 1)),
+                    "elapsed_s": elapsed(),
+                    "eta_s": _eta_s(t_label, done, label_total),
+                    "log": f"DIN {din} labeling complete",
+                })
+
+            await enrich_labeling_batch_fast(
+                din_map,
+                enable_ocr=enable_ocr,
+                enable_llm=enable_llm,
+                concurrency=_LABEL_SEM_SIZE,
+                on_progress=_on_label_progress,
+            )
 
         await emit(job, {
             "stage": "Labeling", "done": label_total, "total": label_total,
@@ -265,7 +262,7 @@ async def run_export_job(
             "elapsed_s": elapsed(), "eta_s": 0,
             "log": (
                 f"Labeling done — {label_total} fetched, "
-                f"{label_cache_hits} reused from cache"
+                f"{label_cache_hits} reused from store cache"
             ),
         })
 

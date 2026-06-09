@@ -17,9 +17,13 @@ pytest_plugins = ("anyio",)
 
 
 @pytest.mark.live
+@pytest.mark.integration
 @pytest.mark.anyio
-async def test_async_export_matches_sync_for_alpelisib() -> None:
+async def test_async_export_matches_sync_for_alpelisib(tmp_path) -> None:
     """Async export path must produce byte-for-byte equivalent Sheet 1 to the sync path."""
+    import app.enrichment.store as _store_mod
+    _store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
     from httpx import ASGITransport, AsyncClient
 
     from app.main import app
