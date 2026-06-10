@@ -73,10 +73,39 @@ _conn: Optional[sqlite3.Connection] = None
 _lock = threading.RLock()  # reentrant — write operations call get_conn() while holding the lock
 
 
+_LABELING_MIGRATIONS = (
+    # columns added when excipients were split from nonmedicinal_ingredients
+    "excipients_core TEXT",
+    "excipients_core_page INTEGER",
+    "excipients_coating TEXT",
+    "excipients_coating_page INTEGER",
+    "preservatives TEXT",
+    "preservatives_page INTEGER",
+    # columns present in older schemas that new code still writes
+    "colour TEXT",
+    "colour_page INTEGER",
+    "pack_style TEXT",
+    "pack_style_page INTEGER",
+    "size_mm TEXT",
+    "size_mm_page INTEGER",
+    "weight TEXT",
+    "weight_page INTEGER",
+    "ph TEXT",
+    "ph_page INTEGER",
+    "has_unverified INTEGER NOT NULL DEFAULT 0",
+)
+
+
 def _open() -> sqlite3.Connection:
     conn = sqlite3.connect(_DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript(_DDL)
+    # Add any columns introduced after the table was first created.
+    for col_def in _LABELING_MIGRATIONS:
+        try:
+            conn.execute(f"ALTER TABLE labeling ADD COLUMN {col_def}")
+        except sqlite3.OperationalError:
+            pass  # column already exists — ignore
     conn.commit()
     return conn
 
@@ -180,6 +209,22 @@ def get_labeling_for_din(din: str) -> Optional[dict]:
         "SELECT * FROM labeling WHERE din = ?", (din,)
     ).fetchone()
     return dict(row) if row else None
+
+
+def reset_labeling_table() -> int:
+    """Drop and recreate the labeling table. Returns number of rows deleted."""
+    with _lock:
+        conn = get_conn()
+        count = conn.execute("SELECT COUNT(*) FROM labeling").fetchone()[0]
+        conn.execute("DROP TABLE IF EXISTS labeling")
+        conn.executescript(_DDL)
+        for col_def in _LABELING_MIGRATIONS:
+            try:
+                conn.execute(f"ALTER TABLE labeling ADD COLUMN {col_def}")
+            except sqlite3.OperationalError:
+                pass
+        conn.commit()
+        return count
 
 
 def reset_for_testing(db_path: Optional[str] = None) -> None:

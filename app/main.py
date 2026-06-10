@@ -1,4 +1,4 @@
-"""Canadian Drug Database Aggregator — FastAPI main application."""
+"""Health Canada Database Aggregator — FastAPI main application."""
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import SOURCE_TIMEOUT
@@ -17,7 +18,7 @@ from app.consistency import check_cross_source_consistency
 from app.enrichment.data_protection import fetch_data_protection_table
 from app.enrichment.labeling import enrich_labeling_batch
 from app.enrichment.patents import enrich_patents
-from app.enrichment.store import get_labeling_for_din
+from app.enrichment.store import get_labeling_for_din, reset_labeling_table
 from app.enrichment.workbook import _is_excluded_din, build_workbook
 from app.export_job import run_export_job
 from app.jobs import create_job, get_job
@@ -29,7 +30,11 @@ from app.sources.generic_submissions import search_generic_submissions
 from app.sources.noc import search_noc
 from app.sources.patent_register import search_patent_register
 
-app = FastAPI(title="Canadian Drug Database Aggregator", version="1.0.0")
+app = FastAPI(title="Health Canada Database Aggregator", version="1.0.0")
+
+import pathlib as _pathlib
+_static_dir = _pathlib.Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 
 async def _timed_source(coro, source_name: str) -> SourceResult:
@@ -154,24 +159,57 @@ async def export(
     )
 
 
+# ── Cache management ──────────────────────────────────────────────────────────
+
+@app.post("/api/reset-labeling-cache")
+async def reset_labeling_cache() -> dict:
+    """Drop and recreate the labeling table, forcing re-extraction on next export."""
+    deleted = reset_labeling_table()
+    return {"status": "ok", "rows_deleted": deleted}
+
+
 # ── Async export: start / stream / result ─────────────────────────────────────
 
 class ExportStartRequest(BaseModel):
-    q: str
+    q: str = ""                  # single-query backward compat
+    queries: list[str] = []      # multi-product list (preferred)
     field: str = "ingredient"
     allow_partial: bool = False
     enable_ocr: bool = True
 
 
+def _resolve_queries(req: ExportStartRequest) -> list[str]:
+    """Return deduplicated, non-empty list of queries (case-insensitive dedup, order preserved)."""
+    raw = req.queries if req.queries else ([req.q.strip()] if req.q.strip() else [])
+    seen: set[str] = set()
+    out: list[str] = []
+    for q in raw:
+        q = q.strip()
+        if q and q.lower() not in seen:
+            seen.add(q.lower())
+            out.append(q)
+    return out
+
+
 @app.post("/export/start")
 async def export_start(req: ExportStartRequest) -> dict:
-    """Create a background export job and return its job_id immediately."""
+    """Create a background export job and return its job_id immediately.
+
+    Accepts either ``q`` (single ingredient, backward compat) or ``queries``
+    (list of ingredients for a multi-product side-by-side workbook).
+    Exact duplicates (case-insensitive) are silently deduplicated; the
+    deduplicated list is returned so the caller knows what was accepted.
+    Input order is preserved — block order in the workbook matches entry order.
+    """
+    qs = _resolve_queries(req)
+    if not qs:
+        raise HTTPException(400, "No query provided — set q or queries")
     job_id = uuid.uuid4().hex
-    job = create_job(job_id, req.q.strip(), req.field)
+    job = create_job(job_id, qs[0], req.field, queries=qs)
     asyncio.create_task(
         run_export_job(job, req.allow_partial, req.enable_ocr)
     )
-    return {"job_id": job_id}
+    return {"job_id": job_id, "queries": qs}
 
 
 @app.get("/export/stream/{job_id}")
@@ -235,12 +273,39 @@ async def export_result(job_id: str) -> FileResponse:
         raise HTTPException(404, "Job not found")
     if job.status != "complete" or not job.result_path:
         raise HTTPException(409, f"Job not complete (status={job.status})")
-    filename = f"canadian_drugs_{job.query.replace(' ', '_')}_{job.field}.xlsx"
+    qs = job.queries or [job.query]
+    if len(qs) == 1:
+        filename = f"canadian_drugs_{qs[0].replace(' ', '_')}_{job.field}.xlsx"
+    else:
+        filename = f"canadian_drugs_{len(qs)}_products_{job.field}.xlsx"
     return FileResponse(
         path=job.result_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=filename,
     )
+
+
+@app.get("/api/export-data/{job_id}")
+async def export_data_json(job_id: str) -> dict:
+    """Return Sheet 1 and Sheet 2 as JSON — the exact dataset written to the XLSX.
+
+    This is the dashboard data endpoint.  The dashboard must call this instead of
+    re-running any search or enrichment; it consumes the finished job snapshot.
+    """
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    if job.status == "running":
+        raise HTTPException(409, "Job still running — wait for SSE complete event")
+    if job.status == "error":
+        raise HTTPException(422, f"Job failed: {job.error}")
+    return {
+        "query": job.query,
+        "queries": job.queries or [job.query],
+        "field": job.field,
+        "sheet1": {"columns": job.sheet1_columns, "records": job.sheet1_records},
+        "sheet2": {"columns": job.sheet2_columns, "records": job.sheet2_records},
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -254,148 +319,519 @@ _HTML_UI = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Canadian Drug Database Aggregator</title>
+<title>Health Canada Database Aggregator</title>
+<!--
+  Zydus palette (extracted from zydususa.com/wp-content/themes/zydus-pharmaceuticals/css/style_v2.css):
+    Purple (primary): #AA55A0
+    Deep purple:      #3D226E
+    Teal (secondary): #00A5A5
+    Teal dark:        #008BAD
+    Teal deeper:      #00586E
+    Light teal:       #5AC3BE
+    Body text:        #58595B
+    Border:           #D1D1D1
+    Card bg:          #FFFFFF
+    Page bg:          #FAFAFA
+    Font (primary):   "Exo" (Google Fonts)
+    Font (body):      "Inter", sans-serif
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Exo:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
+  /* ── Zydus brand design tokens ───────────────────────────────────────── */
   :root {
-    --red: #cc0000;
-    --maple: #d62828;
-    --bg: #f8f9fa;
-    --card: #ffffff;
-    --border: #dee2e6;
-    --text: #212529;
-    --muted: #6c757d;
-    --ok: #198754;
-    --warn: #e67e22;
-    --err: #dc3545;
-    --badge-dpd: #1565C0;
-    --badge-gen: #6A1B9A;
-    --badge-noc: #2E7D32;
-    --badge-pr: #C62828;
+    --primary:      #AA55A0;   /* Zydus purple */
+    --primary-dark: #3D226E;   /* deep purple — hover / nav */
+    --teal:         #00A5A5;   /* Zydus teal */
+    --teal-dark:    #008BAD;   /* teal hover */
+    --nav-bg:       #3D226E;   /* deep purple nav bar */
+    --bg:           #FAFAFA;
+    --card:         #FFFFFF;
+    --border:       #D1D1D1;
+    --text:         #333333;
+    --muted:        #58595B;
+    --ok:           #00A5A5;
+    --warn:         #B45309;
+    --err:          #C0392B;
+    --badge-dpd:    #3D226E;   /* deep purple */
+    --badge-gen:    #AA55A0;   /* purple */
+    --badge-noc:    #00A5A5;   /* teal */
+    --badge-pr:     #008BAD;   /* teal-dark */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  header { background: var(--maple); color: white; padding: 16px 24px; }
-  header h1 { font-size: 1.4rem; font-weight: 700; }
-  header p { font-size: 0.85rem; opacity: 0.85; margin-top: 2px; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
-  .search-box { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
+
+  /* ── Top nav bar ─────────────────────────────────────────────────────── */
+  .site-nav {
+    background: var(--nav-bg);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 52px;
+    gap: 16px;
+  }
+  .nav-zydus-logo {
+    height: 28px;
+    width: auto;
+    flex-shrink: 0;
+    filter: brightness(0) invert(1);
+    opacity: 0.92;
+  }
+  .site-nav-brand-wrap { display: flex; flex-direction: column; gap: 0; }
+  .site-nav-brand {
+    font-family: "Exo", sans-serif;
+    font-weight: 700;
+    font-size: 0.84rem;
+    color: rgba(255,255,255,0.92);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+  .site-nav-sub {
+    font-size: 0.62rem;
+    font-weight: 400;
+    color: rgba(255,255,255,0.42);
+    text-transform: uppercase;
+    letter-spacing: .09em;
+  }
+  .site-nav-divider { flex: 1; }
+  .site-nav-link {
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.65);
+    text-decoration: none;
+    letter-spacing: .04em;
+  }
+  .site-nav-link:hover { color: #fff; }
+
+  /* ── Header ──────────────────────────────────────────────────────────── */
+  header {
+    background: var(--primary);
+    color: white;
+    padding: 24px 24px 22px;
+    border-bottom: 3px solid var(--teal);
+  }
+  .header-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 10px;
+  }
+  .header-logo-viona {
+    height: 56px;
+    width: auto;
+    flex-shrink: 0;
+    filter: brightness(0) invert(1);
+    opacity: 0.95;
+  }
+  .header-logo-zydus {
+    height: 40px;
+    width: auto;
+    flex-shrink: 0;
+    filter: brightness(0) invert(1);
+    opacity: 0.88;
+    margin-left: 4px;
+  }
+  .header-company-name {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: rgba(255,255,255,0.58);
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  header h1 {
+    font-family: "Exo", sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    margin-bottom: 0;
+  }
+  header p {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.68);
+    font-weight: 400;
+    letter-spacing: .01em;
+    margin-top: 6px;
+  }
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  .container { max-width: 1280px; margin: 0 auto; padding: 28px 20px; }
+
+  /* ── Search card ─────────────────────────────────────────────────────── */
+  .search-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 22px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(170,85,160,.08);
+  }
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-  .field-group { display: flex; flex-direction: column; gap: 4px; }
-  .field-group label { font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  input[type=text], select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; outline: none; }
-  input[type=text]:focus, select:focus { border-color: var(--maple); box-shadow: 0 0 0 3px rgba(214,40,40,.12); }
-  #query { min-width: 280px; }
-  .btn { padding: 9px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; font-weight: 600; }
-  .btn-primary { background: var(--maple); color: white; }
-  .btn-primary:hover { background: #b52222; }
-  .btn-export { background: #1a7340; color: white; }
-  .btn-export:hover:not(:disabled) { background: #155a33; }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .summary-bar { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 10px 16px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
-  .ai-summary { background: #e8f4fd; border: 1px solid #90caf9; border-radius: 6px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 16px; display: none; }
-  .ai-summary strong { color: #1565C0; }
-  .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 16px; flex-wrap: wrap; }
-  .tab-btn { padding: 8px 18px; border: 1px solid var(--border); border-bottom: none; background: var(--bg); cursor: pointer; font-size: 0.9rem; margin-bottom: -2px; border-radius: 6px 6px 0 0; font-weight: 500; }
-  .tab-btn.active { background: var(--card); border-bottom: 2px solid var(--card); font-weight: 700; }
+  .field-group { display: flex; flex-direction: column; gap: 5px; }
+  .field-group label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+  }
+  input[type=text], select {
+    padding: 9px 13px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 0.92rem;
+    font-family: inherit;
+    outline: none;
+    color: var(--text);
+    background: #fff;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input[type=text]:focus, select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(170,85,160,.15);
+  }
+  #query { min-width: 300px; }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────── */
+  .btn {
+    padding: 9px 22px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    letter-spacing: .02em;
+    transition: background .15s;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-export { background: var(--teal); color: white; }
+  .btn-export:hover:not(:disabled) { background: var(--teal-dark); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── Status / summary bars ───────────────────────────────────────────── */
+  @keyframes summaryBarIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .summary-bar {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-left: 6px solid #e6a500;
+    border-radius: 4px;
+    padding: 13px 18px;
+    font-size: 0.93rem;
+    font-weight: 500;
+    margin-bottom: 20px;
+    display: none;
+    color: #4a3600;
+    box-shadow: 0 2px 10px rgba(230, 165, 0, 0.22);
+    animation: summaryBarIn 0.25s ease;
+  }
+  .ai-summary {
+    background: #E8F4F8;
+    border: 1px solid #A8D4E6;
+    border-left: 4px solid var(--teal);
+    border-radius: 3px;
+    padding: 12px 16px;
+    font-size: 0.88rem;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .ai-summary strong { color: var(--teal); }
+
+  /* ── Source tabs ─────────────────────────────────────────────────────── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    padding: 9px 20px;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    background: var(--bg);
+    cursor: pointer;
+    font-size: 0.86rem;
+    font-family: inherit;
+    font-weight: 500;
+    margin-bottom: -2px;
+    border-radius: 3px 3px 0 0;
+    color: var(--muted);
+    transition: background .12s, color .12s;
+  }
+  .tab-btn.active {
+    background: var(--card);
+    border-bottom: 2px solid var(--card);
+    font-weight: 700;
+    color: var(--primary);
+  }
   .tab-pane { display: none; }
   .tab-pane.active { display: block; }
-  .source-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .badge { padding: 3px 10px; border-radius: 20px; color: white; font-size: 0.78rem; font-weight: 700; }
-  .badge-DPD { background: var(--badge-dpd); }
+
+  /* ── Source header badges ────────────────────────────────────────────── */
+  .source-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .badge {
+    padding: 3px 11px;
+    border-radius: 2px;
+    color: white;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .badge-DPD           { background: var(--badge-dpd); }
   .badge-GenericSubmissions { background: var(--badge-gen); }
-  .badge-NOC { background: var(--badge-noc); }
+  .badge-NOC           { background: var(--badge-noc); }
   .badge-PatentRegister { background: var(--badge-pr); }
-  .status-ok { color: var(--ok); font-weight: 600; }
-  .status-no_results { color: var(--muted); }
-  .status-error, .status-timeout { color: var(--err); }
-  .status-unsupported { color: var(--warn); }
-  .error-box { background: #fff5f5; border: 1px solid #fc8181; border-radius: 6px; padding: 12px; font-size: 0.88rem; color: var(--err); }
-  .info-box { background: #f0f4ff; border: 1px solid #c3dafe; border-radius: 6px; padding: 12px; font-size: 0.88rem; color: var(--muted); }
-  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  thead tr { background: var(--bg); }
-  th { padding: 10px 12px; text-align: left; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap; }
-  td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+
+  /* ── Status colours ──────────────────────────────────────────────────── */
+  .status-ok           { color: var(--ok); font-weight: 600; }
+  .status-no_results   { color: var(--muted); }
+  .status-error, .status-timeout { color: var(--err); font-weight: 600; }
+  .status-unsupported  { color: var(--warn); }
+
+  /* ── Alert boxes ─────────────────────────────────────────────────────── */
+  .error-box {
+    background: #FDF3F2;
+    border: 1px solid #E8B4B0;
+    border-left: 4px solid var(--err);
+    border-radius: 3px;
+    padding: 12px 16px;
+    font-size: 0.88rem;
+    color: var(--err);
+  }
+  .info-box {
+    background: #EBF0FA;
+    border: 1px solid #B8C9F2;
+    border-left: 4px solid var(--primary);
+    border-radius: 3px;
+    padding: 12px 16px;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+
+  /* ── Data table ──────────────────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  thead tr { background: #F0F3FA; }
+  th {
+    padding: 10px 13px;
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--primary);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 13px;
+    border-bottom: 1px solid #EBEBEB;
+    vertical-align: top;
+    color: var(--text);
+  }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #f5f5f5; }
-  .record-link { color: var(--maple); text-decoration: none; font-size: 0.8rem; }
-  .record-link:hover { text-decoration: underline; }
-  .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid rgba(214,40,40,.3); border-top-color: var(--maple); border-radius: 50%; animation: spin .8s linear infinite; }
+  tr:hover td { background: #F5F7FD; }
+  .record-link { color: var(--teal); text-decoration: none; font-size: 0.8rem; font-weight: 500; }
+  .record-link:hover { text-decoration: underline; color: var(--teal-dark); }
+
+  /* ── Spinner / loading ───────────────────────────────────────────────── */
+  .spinner {
+    display: inline-block; width: 18px; height: 18px;
+    border: 3px solid rgba(170,85,160,.25);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .loading-msg { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 24px 0; }
-  footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 24px; }
-  .checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 0.88rem; cursor: pointer; }
-  @media (max-width: 600px) { .row { flex-direction: column; } }
-  /* Combination groups */
-  .combo-group { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .combo-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--bg); cursor: pointer; list-style: none; user-select: none; flex-wrap: wrap; }
+  .loading-msg { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 28px 0; }
+
+  /* ── Footer ──────────────────────────────────────────────────────────── */
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.78rem;
+    padding: 28px 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 32px;
+  }
+
+  /* ── Form extras ─────────────────────────────────────────────────────── */
+  .checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 0.86rem; cursor: pointer; color: var(--text); }
+  @media (max-width: 640px) { .row { flex-direction: column; } }
+
+  /* ── Combination groups ──────────────────────────────────────────────── */
+  .combo-group { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .combo-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 16px; background: #F0F3FA;
+    cursor: pointer; list-style: none; user-select: none; flex-wrap: wrap;
+  }
   .combo-header::-webkit-details-marker { display: none; }
-  .combo-header::before { content: '▶'; font-size: 0.7rem; color: var(--muted); transition: transform .15s; min-width: 10px; display: inline-block; }
+  .combo-header::before {
+    content: '▶'; font-size: 0.65rem; color: var(--primary);
+    transition: transform .15s; min-width: 10px; display: inline-block;
+  }
   details[open] > .combo-header::before { transform: rotate(90deg); }
-  .combo-label { font-weight: 700; font-size: 0.93rem; }
-  .combo-stats { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+  .combo-label { font-weight: 700; font-size: 0.92rem; color: var(--primary); }
+  .combo-stats { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
   .combo-companies { display: flex; gap: 4px; flex-wrap: wrap; }
-  .company-chip { background: #e9ecef; border-radius: 12px; padding: 2px 8px; font-size: 0.74rem; color: var(--muted); }
-  .company-chip.more { background: transparent; border: 1px solid var(--border); }
+  .company-chip {
+    background: #DDE4F5; border-radius: 2px;
+    padding: 2px 8px; font-size: 0.72rem; color: var(--primary);
+  }
+  .company-chip.more { background: transparent; border: 1px solid var(--border); color: var(--muted); }
   .combo-body table { border-radius: 0; border: none; border-top: 1px solid var(--border); }
-  /* Export progress panel */
+
+  /* ── Export progress panel ───────────────────────────────────────────── */
   .export-panel {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
+    border-radius: 4px;
+    padding: 18px 20px;
     margin-bottom: 20px;
     display: none;
+    box-shadow: 0 1px 3px rgba(170,85,160,.08);
   }
   .export-panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
   }
-  .export-stage-label { font-weight: 700; font-size: 0.95rem; }
-  .export-stats { font-size: 0.82rem; color: var(--muted); }
+  .export-stage-label { font-weight: 700; font-size: 0.95rem; color: var(--primary); }
+  .export-stats { font-size: 0.8rem; color: var(--muted); }
   .progress-track {
-    height: 10px;
-    background: #e9ecef;
-    border-radius: 5px;
-    overflow: hidden;
-    margin-bottom: 10px;
+    height: 8px; background: #DDE4F5; border-radius: 4px;
+    overflow: hidden; margin-bottom: 12px;
   }
   .progress-fill {
-    height: 100%;
-    background: var(--ok);
-    border-radius: 5px;
-    transition: width 0.4s ease;
-    width: 0%;
+    height: 100%; background: var(--primary); border-radius: 4px;
+    transition: width 0.4s ease; width: 0%;
   }
   .progress-fill.error { background: var(--err); }
   .export-log {
-    height: 130px;
-    overflow-y: auto;
-    font-size: 0.74rem;
+    height: 130px; overflow-y: auto;
+    font-size: 0.73rem;
     font-family: "SF Mono", "Fira Code", "Consolas", monospace;
-    background: #1a1a2e;
-    color: #c8d0e8;
-    padding: 8px 10px;
-    border-radius: 4px;
-    line-height: 1.5;
+    background: #0D1829; color: #C8D4E8;
+    padding: 10px 12px; border-radius: 3px; line-height: 1.55;
   }
-  .export-log .log-ok { color: #7ec880; }
-  .export-log .log-err { color: #f28b82; }
-  .export-log .log-dim { color: #888; }
+  .export-log .log-ok { color: #5AC3BE; }
+  .export-log .log-err { color: #E07070; }
+  .export-log .log-dim { color: #666; }
+
+  /* ── Dashboard panel ─────────────────────────────────────────────────── */
+  .dashboard-panel { display: none; margin-top: 28px; }
+  .dashboard-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px; flex-wrap: wrap; gap: 8px;
+    border-bottom: 2px solid var(--primary); padding-bottom: 10px;
+  }
+  .dashboard-title {
+    font-family: "Exo", sans-serif;
+    font-size: 1.1rem; font-weight: 700; color: var(--primary);
+  }
+
+  /* KPI cards */
+  .kpi-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+  .kpi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--primary);
+    border-radius: 4px;
+    padding: 16px 20px;
+    flex: 1; min-width: 140px;
+    box-shadow: 0 1px 3px rgba(170,85,160,.08);
+  }
+  .kpi-value {
+    font-family: "Exo", sans-serif;
+    font-size: 2rem; font-weight: 700;
+    color: var(--primary); line-height: 1;
+  }
+  .kpi-label {
+    font-size: 0.72rem; color: var(--muted); margin-top: 5px;
+    text-transform: uppercase; letter-spacing: .07em;
+  }
+
+  /* Dashboard table */
+  .dash-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(170,85,160,.06);
+  }
+  .dash-table-wrap table { min-width: 800px; border: none; border-radius: 0; }
+
+  /* Dashboard tabs */
+  .dash-tab-bar { display: flex; gap: 0; margin-bottom: 14px; }
+  .dash-tab {
+    padding: 7px 16px;
+    border: 1px solid var(--border); border-bottom: none;
+    background: var(--bg); cursor: pointer;
+    font-size: 0.84rem; font-family: inherit; font-weight: 500;
+    border-radius: 3px 3px 0 0; color: var(--muted);
+    transition: background .12s, color .12s;
+  }
+  .dash-tab.active {
+    background: var(--card); border-bottom: 2px solid var(--card);
+    font-weight: 700; color: var(--primary);
+  }
+
+  /* Canary / debug box */
+  .canary-box {
+    background: #E8F5F0; border: 1px solid #A8D5BE;
+    border-left: 4px solid var(--ok);
+    border-radius: 3px;
+    padding: 10px 14px; font-size: 0.8rem;
+    font-family: "SF Mono", monospace;
+    margin-bottom: 14px; white-space: pre-wrap; color: #1A4D36;
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>🍁 Canadian Drug Database Aggregator</h1>
-  <p>Search DPD · Generic Submissions Under Review · Notice of Compliance · Patent Register</p>
+<nav class="site-nav" role="navigation" aria-label="Site navigation">
+  <img class="nav-zydus-logo" src="/static/zydus_logo.png" alt="Zydus" />
+  <div class="site-nav-brand-wrap">
+    <span class="site-nav-brand">Zydus</span>
+    <span class="site-nav-sub">Dedicated To Life</span>
+  </div>
+  <span class="site-nav-divider"></span>
+  <a class="site-nav-link" href="https://health-products.canada.ca/drug-product-database/" target="_blank" rel="noopener">DPD</a>
+  <a class="site-nav-link" href="https://health-products.canada.ca/noc/" target="_blank" rel="noopener">NOC</a>
+  <a class="site-nav-link" href="https://pr-rdb.hc-sc.gc.ca/pr-rdb/" target="_blank" rel="noopener">Patent Register</a>
+</nav>
+<header role="banner">
+  <div class="header-brand-row">
+    <img class="header-logo-viona" src="/static/viona_logo.png" alt="Viona" />
+    <img class="header-logo-zydus" src="/static/zydus_logo.png" alt="Zydus" />
+    <div>
+      <div class="header-company-name">Zydus &nbsp;&mdash;&nbsp; Dedicated To Life</div>
+      <h1>Health Canada Database Aggregator</h1>
+    </div>
+  </div>
+  <p>Simultaneous search across DPD &middot; Generic Submissions Under Review &middot; Notice of Compliance &middot; Patent Register</p>
 </header>
 <div class="container">
   <div class="search-box">
     <div class="row">
       <div class="field-group" style="flex:1">
-        <label for="query">Search Term</label>
-        <input type="text" id="query" placeholder="e.g. metformin, acetaminophen, Lipitor…" autocomplete="off"/>
+        <label for="query">Ingredients <span id="queryCount" style="font-weight:400;color:var(--muted);font-size:0.72rem">&mdash; one per line or comma-separated; export runs all</span></label>
+        <textarea id="query" rows="3" style="resize:vertical;min-width:300px;font-family:inherit;padding:9px 13px;border:1px solid var(--border);border-radius:3px;font-size:0.92rem;color:var(--text);background:#fff;transition:border-color .15s,box-shadow .15s;outline:none" placeholder="alpelisib&#10;apremilast&#10;abrocitinib&#10;or: alpelisib, apremilast" oninput="updateQueryCount()"></textarea>
+        <div id="queryHint" style="font-size:0.72rem;color:var(--muted);margin-top:3px"></div>
+      </div>
       </div>
       <div class="field-group">
         <label for="field">Search By</label>
@@ -407,7 +843,7 @@ _HTML_UI = """<!DOCTYPE html>
         </select>
       </div>
       <div class="field-group" style="justify-content:flex-end">
-        <label class="checkbox-label" title="AI summaries require LLM_PROVIDER to be configured (disabled by default)">
+        <label class="checkbox-label">
           <input type="checkbox" id="summary"/> AI Summary (requires LLM provider)
         </label>
       </div>
@@ -420,6 +856,7 @@ _HTML_UI = """<!DOCTYPE html>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-primary" id="searchBtn" onclick="doSearch()">Search</button>
           <button class="btn btn-export" id="exportBtn" onclick="doExport()" disabled>⬇ Export XLSX</button>
+          <button class="btn" style="background:#888;color:white;font-size:0.8em;padding:4px 10px;" onclick="resetLabelingCache()" title="Clear cached labeling data and force re-extraction on next export">Reset labeling cache</button>
         </div>
       </div>
     </div>
@@ -437,11 +874,31 @@ _HTML_UI = """<!DOCTYPE html>
     <div class="export-log" id="exportLog"></div>
   </div>
 
-  <div class="summary-bar" id="summaryBar"></div>
   <div class="ai-summary" id="aiSummary"></div>
   <div id="results"></div>
+
+  <!-- Dashboard panel: shown after export completes; renders exact XLSX dataset -->
+  <div class="dashboard-panel" id="dashboardPanel">
+    <div class="dashboard-header">
+      <span class="dashboard-title">📊 Enriched Dashboard — same dataset as XLSX</span>
+      <span style="font-size:0.8rem;color:var(--muted)" id="dashMeta"></span>
+    </div>
+    <div class="canary-box" id="canaryBox"></div>
+    <div class="kpi-row" id="kpiRow"></div>
+    <div class="dash-tab-bar">
+      <button class="dash-tab active" id="dashTab1" onclick="switchDashTab(1)">DPD + NOC + Patents</button>
+      <button class="dash-tab" id="dashTab2" onclick="switchDashTab(2)">Generic Submissions</button>
+    </div>
+    <div id="dashPane1"><div class="dash-table-wrap" id="dashSheet1"></div></div>
+    <div id="dashPane2" style="display:none"><div class="dash-table-wrap" id="dashSheet2"></div></div>
+  </div>
 </div>
-<footer>Data sourced from Health Canada public databases. Accuracy relies on deterministic extraction — no AI-generated data fields.</footer>
+<footer role="contentinfo">
+  <strong style="color:var(--primary);font-family:'Exo',sans-serif">Zydus</strong> <span style="color:var(--muted);font-size:0.76rem">— Dedicated To Life</span>
+  <br/>
+  Data sourced from Health Canada public databases (DPD, NOC, Patent Register, GSUR). &nbsp;|&nbsp;
+  Accuracy relies on deterministic extraction — no AI-generated data fields.
+</footer>
 
 <script>
 const SOURCE_LABELS = {
@@ -501,6 +958,38 @@ const SOURCE_COLS = {
 let lastResponse = null;
 let currentJobId = null;
 let currentEventSource = null;
+
+// ---- Multi-ingredient query parsing ----
+
+function parseQueries() {
+  const raw = document.getElementById('query').value || '';
+  // Split on newlines, then commas within each segment
+  const parts = raw.split(/[\\n\\r]+/).flatMap(line => line.split(','));
+  const seen = new Set();
+  const result = [];
+  for (const p of parts) {
+    const trimmed = p.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(trimmed);
+    }
+  }
+  return result;
+}
+
+function updateQueryCount() {
+  const qs = parseQueries();
+  const hint = document.getElementById('queryHint');
+  if (qs.length === 0) {
+    hint.textContent = '';
+  } else if (qs.length === 1) {
+    hint.textContent = `1 ingredient — Search previews it; Export runs it.`;
+  } else {
+    hint.textContent = `${qs.length} ingredients: ${qs.map(q => '“' + q + '”').join(', ')} — Search previews the first; Export runs all side-by-side.`;
+  }
+}
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -624,13 +1113,13 @@ function render(data) {
   const { metadata, sources, ai_summary } = data;
   const searchedIngredient = metadata.field === 'ingredient' ? metadata.query : null;
 
-  const bar = document.getElementById('summaryBar');
+  // Build status bar with full inline styles — no separate CSS class needed
   const counts = sources.map(s => `${SOURCE_LABELS[s.source]||s.source}: <strong>${s.count}</strong>`).join(' &nbsp;|&nbsp; ');
-  bar.innerHTML = `Searched for <strong>"${escHtml(metadata.query)}"</strong> by <em>${escHtml(metadata.field)}</em> &nbsp;·&nbsp; ${counts}`;
+  let barText = `Searched for <strong>&ldquo;${escHtml(metadata.query)}&rdquo;</strong> by <em>${escHtml(metadata.field)}</em> &nbsp;&middot;&nbsp; ${counts}`;
   if (metadata.normalized_terms?.length > 1) {
-    bar.innerHTML += ` &nbsp;·&nbsp; <em>Also searched: ${metadata.normalized_terms.slice(1).map(escHtml).join(', ')}</em>`;
+    barText += ` &nbsp;&middot;&nbsp; <em>Also searched: ${metadata.normalized_terms.slice(1).map(escHtml).join(', ')}</em>`;
   }
-  bar.style.display = 'block';
+  const _barHtml = `<div style="background:#fff3cd;border:1px solid #ffc107;border-left:6px solid #e6a500;border-radius:4px;padding:13px 18px;margin-bottom:20px;font-size:0.93rem;font-weight:500;color:#4a3600;box-shadow:0 2px 8px rgba(230,165,0,.2)">${barText}</div>`;
 
   const aiDiv = document.getElementById('aiSummary');
   if (ai_summary) {
@@ -657,7 +1146,7 @@ function render(data) {
     panesHtml += `<div class="tab-pane${i===0?' active':''}" id="pane-${t}">${content}</div>`;
   });
 
-  document.getElementById('results').innerHTML = tabsHtml + panesHtml;
+  document.getElementById('results').innerHTML = _barHtml + tabsHtml + panesHtml;
   document.getElementById('exportBtn').disabled = false;
 }
 
@@ -669,14 +1158,20 @@ function switchTab(name) {
 }
 
 async function doSearch() {
-  const q = document.getElementById('query').value.trim();
+  const queries = parseQueries();
+  if (!queries.length) { alert('Please enter at least one ingredient.'); return; }
+  // Search previews the FIRST ingredient; multi-product export runs all.
+  const q = queries[0];
   const field = document.getElementById('field').value;
   const summary = document.getElementById('summary').checked;
-  if (!q) { alert('Please enter a search term.'); return; }
+  if (queries.length > 1) {
+    // Show a brief notice that only the first is being previewed
+    document.getElementById('queryHint').innerHTML =
+      `<span style="color:var(--warn)">Previewing <strong>"${escHtml(q)}"</strong> only &mdash; Export will run all ${queries.length} ingredients side-by-side.</span>`;
+  }
 
   document.getElementById('searchBtn').disabled = true;
   document.getElementById('exportBtn').disabled = true;
-  document.getElementById('summaryBar').style.display = 'none';
   document.getElementById('aiSummary').style.display = 'none';
   document.getElementById('results').innerHTML = '<div class="loading-msg"><div class="spinner"></div>Querying all four databases concurrently…</div>';
 
@@ -733,6 +1228,8 @@ function _handleExportEvent(data) {
     a.click();
     document.body.removeChild(a);
     document.getElementById('exportBtn').disabled = false;
+    // Load dashboard from the same job's snapshot — no re-scraping
+    _loadDashboard(currentJobId);
     _closeExport();
     return;
   }
@@ -756,10 +1253,17 @@ function _handleExportEvent(data) {
   if (data.log) _appendLog(`[${data.stage}] ${data.log}`);
 }
 
+async function resetLabelingCache() {
+  if (!confirm('Clear all cached labeling data? The next export will re-fetch from PDFs.')) return;
+  const resp = await fetch('/api/reset-labeling-cache', {method: 'POST'});
+  const data = await resp.json();
+  alert(`Labeling cache cleared (${data.rows_deleted} rows removed). Next export will re-extract.`);
+}
+
 async function doExport() {
-  const q = document.getElementById('query').value.trim();
+  const queries = parseQueries();
+  if (!queries.length) return;
   const field = document.getElementById('field').value;
-  if (!q) return;
 
   const enableOcr = document.getElementById('enableOcr').checked;
 
@@ -770,7 +1274,10 @@ async function doExport() {
   document.getElementById('exportLog').innerHTML = '';
   document.getElementById('progressFill').style.width = '0%';
   document.getElementById('progressFill').classList.remove('error');
-  document.getElementById('exportStageLabel').textContent = 'Starting export…';
+  const label = queries.length === 1
+    ? `Exporting "${queries[0]}"…`
+    : `Exporting ${queries.length} ingredients side-by-side…`;
+  document.getElementById('exportStageLabel').textContent = label;
   document.getElementById('exportStats').textContent = '';
 
   _closeExport();
@@ -781,7 +1288,7 @@ async function doExport() {
     const resp = await fetch('/export/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q, field, allow_partial: false, enable_ocr: enableOcr }),
+      body: JSON.stringify({ queries, field, allow_partial: false, enable_ocr: enableOcr }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -819,9 +1326,110 @@ async function doExport() {
   };
 }
 
+// Ctrl+Enter (or Cmd+Enter) submits search from the textarea
 document.getElementById('query').addEventListener('keydown', e => {
-  if (e.key === 'Enter') doSearch();
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doSearch();
 });
+
+// ---- Dashboard: consume exact XLSX dataset from job snapshot (no re-scraping) ----
+
+function _dashTable(columns, records) {
+  if (!records.length) return '<div class="info-box">No data.</div>';
+  let html = '<table><thead><tr>';
+  columns.forEach(c => { html += `<th>${escHtml(c)}</th>`; });
+  html += '</tr></thead><tbody>';
+  records.forEach(row => {
+    html += '<tr>';
+    columns.forEach(c => {
+      const v = row[c];
+      html += `<td>${v != null && v !== '' ? escHtml(String(v)) : '<span style="color:#aaa">—</span>'}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function _kpiCards(sheet1Records, sheet1Cols) {
+  const total = sheet1Records.length;
+  const withPatents = sheet1Records.filter(r => r['patent_count'] && Number(r['patent_count']) > 0).length;
+  const hasDP = sheet1Cols.includes('data_protection_ends');
+  const underDP = hasDP
+    ? sheet1Records.filter(r => r['data_protection_ends'] && String(r['data_protection_ends']).trim() !== '' && String(r['data_protection_ends']) !== 'None').length
+    : 0;
+  const hasPM = sheet1Records.filter(r => {
+    const v = r['active_ingredient'];
+    return v && v !== 'Not stated' && v !== 'No PM available' && v !== 'Not in PM' && String(v).trim() !== '';
+  }).length;
+
+  const cards = [
+    { label: 'Total DINs', value: total },
+    { label: 'With Patents', value: withPatents },
+    { label: 'Under Data Protection', value: underDP },
+    { label: 'With PM Labeling Data', value: hasPM },
+  ];
+  return cards.map(c =>
+    `<div class="kpi-card"><div class="kpi-value">${c.value}</div><div class="kpi-label">${c.label}</div></div>`
+  ).join('');
+}
+
+function switchDashTab(n) {
+  document.getElementById('dashTab1').classList.toggle('active', n === 1);
+  document.getElementById('dashTab2').classList.toggle('active', n === 2);
+  document.getElementById('dashPane1').style.display = n === 1 ? '' : 'none';
+  document.getElementById('dashPane2').style.display = n === 2 ? '' : 'none';
+}
+
+async function _loadDashboard(jobId) {
+  if (!jobId) return;
+  const panel = document.getElementById('dashboardPanel');
+  panel.style.display = 'block';
+  document.getElementById('dashSheet1').innerHTML = '<div class="loading-msg"><div class="spinner"></div>Loading dashboard from XLSX dataset…</div>';
+  document.getElementById('kpiRow').innerHTML = '';
+  document.getElementById('canaryBox').textContent = '';
+
+  try {
+    const resp = await fetch(`/api/export-data/${jobId}`);
+    if (!resp.ok) { throw new Error(`HTTP ${resp.status}`); }
+    const data = await resp.json();
+
+    const s1 = data.sheet1;
+    const s2 = data.sheet2;
+
+    // KPI cards
+    document.getElementById('kpiRow').innerHTML = _kpiCards(s1.records, s1.columns);
+
+    // Canary comparison log
+    const qs = data.queries || [data.query];
+    const queryStr = qs.length === 1 ? `"${data.query}"` : `${qs.length} products: ${qs.map(q => '"' + q + '"').join(', ')}`;
+    const canary = [
+      `✓ Dashboard loaded from job snapshot — NO new outbound requests`,
+      `  Sheet 1: ${s1.records.length} rows × ${s1.columns.length} columns`,
+      `  Sheet 2: ${s2.records.length} rows × ${s2.columns.length} columns`,
+      `  ${queryStr} by ${data.field}`,
+      `  Columns: ${s1.columns.join(', ')}`,
+    ].join('\\n');
+    document.getElementById('canaryBox').textContent = canary;
+
+    document.getElementById('dashMeta').textContent =
+      `Job ${jobId.slice(0,8)}… · ${queryStr} by ${data.field}`;
+
+    // Render tables
+    document.getElementById('dashSheet1').innerHTML = _dashTable(s1.columns, s1.records);
+    document.getElementById('dashSheet2').innerHTML = _dashTable(s2.columns, s2.records);
+
+    console.log('[Dashboard canary]', {
+      sheet1_rows: s1.records.length,
+      sheet1_cols: s1.columns.length,
+      sheet2_rows: s2.records.length,
+      job_id: jobId,
+      note: 'No new scraping — data read from job.sheet1_records (same as XLSX)',
+    });
+  } catch (e) {
+    document.getElementById('dashSheet1').innerHTML =
+      `<div class="error-box">Dashboard load failed: ${escHtml(e.message)}</div>`;
+  }
+}
 </script>
 </body>
 </html>
