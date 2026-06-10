@@ -30,7 +30,7 @@ from grade_workbook import (
     check_size_mm,
     check_ph,
     check_preservatives,
-    check_colour,
+    check_color,
     check_shape,
     check_noc_consistency,
     check_patent_count,
@@ -268,29 +268,29 @@ class TestCheckPreservatives:
         assert any(f.check_id == "F1_PRESERVATIVES_VALUE" for f in findings)
 
 
-# ─── check_colour ─────────────────────────────────────────────────────────────
+# ─── check_color ─────────────────────────────────────────────────────────────
 
-class TestCheckColour:
+class TestCheckColor:
     def test_white_ok(self):
-        assert check_colour("12345678", "white") == []
+        assert check_color("12345678", "white") == []
 
     def test_light_blue_ok(self):
-        assert check_colour("12345678", "light blue") == []
+        assert check_color("12345678", "light blue") == []
 
     def test_pale_yellow_ok(self):
-        assert check_colour("12345678", "pale yellow") == []
+        assert check_color("12345678", "pale yellow") == []
 
     def test_sentinel_ok(self):
-        assert check_colour("12345678", NOT_IN_PM) == []
+        assert check_color("12345678", NOT_IN_PM) == []
 
-    def test_novel_colour_warns(self):
-        findings = check_colour("12345678", "cerulean")
-        assert any(f.check_id == "F1_COLOUR_NOVEL" and f.severity == "WARN"
+    def test_novel_color_warns(self):
+        findings = check_color("12345678", "cerulean")
+        assert any(f.check_id == "F1_COLOR_NOVEL" and f.severity == "WARN"
                    for f in findings)
 
-    def test_multi_colour_one_novel(self):
-        findings = check_colour("12345678", "white, cerulean")
-        novel = [f for f in findings if f.check_id == "F1_COLOUR_NOVEL"]
+    def test_multi_color_one_novel(self):
+        findings = check_color("12345678", "white, cerulean")
+        novel = [f for f in findings if f.check_id == "F1_COLOR_NOVEL"]
         assert len(novel) >= 1
 
 
@@ -323,16 +323,16 @@ class TestCheckShape:
 class TestCheckNocConsistency:
     def _full_noc(self, sub_type: str = "NDS") -> dict:
         return {
-            "noc_brand_name":        "PIQRAY",
-            "noc_company":           "Novartis",
             "noc_date":              "2020-01-01",
+            "reason_for_supplement": "Initial filing",
+            "submission_class":      "New",
             "noc_submission_type":   sub_type,
             "noc_therapeutic_class": "Antineoplastic",
         }
 
     def _no_noc(self) -> dict:
         return {c: NO_NOC_RECORD for c in (
-            "noc_brand_name", "noc_company", "noc_date",
+            "noc_date", "reason_for_supplement", "submission_class",
             "noc_submission_type", "noc_therapeutic_class",
         )}
 
@@ -345,19 +345,19 @@ class TestCheckNocConsistency:
     def test_all_no_noc_record_ok(self):
         assert check_noc_consistency("12345678", self._no_noc()) == []
 
-    def test_blank_company_not_inconsistent_error(self):
+    def test_blank_supplement_not_inconsistent_error(self):
         # Blank string ≠ "No NOC record" sentinel, so NOT an ERROR
         row = self._full_noc()
-        row["noc_company"] = ""
+        row["reason_for_supplement"] = ""
         findings = check_noc_consistency("12345678", row)
         assert not any(f.check_id == "F1_NOC_INCONSISTENT" for f in findings)
 
     def test_mixed_no_noc_and_real_is_error(self):
-        # brand + company real, date + sub_type = "No NOC record" → ERROR
+        # noc_date + submission_class real, reason_for_supplement + noc_submission_type = "No NOC record" → ERROR
         row = {
-            "noc_brand_name":        "PIQRAY",
-            "noc_company":           "Novartis",
-            "noc_date":              NO_NOC_RECORD,
+            "noc_date":              "2020-01-01",
+            "reason_for_supplement": NO_NOC_RECORD,
+            "submission_class":      "New",
             "noc_submission_type":   NO_NOC_RECORD,
             "noc_therapeutic_class": NOT_IN_PM,
         }
@@ -394,14 +394,14 @@ class TestCheckNocConsistency:
 # ─── check_patent_count ──────────────────────────────────────────────────────
 
 class TestCheckPatentCount:
-    def test_count_matches_ok(self):
-        row  = {"patent_count": 2, "patent_1_number": "2709025", "patent_2_number": "2845123"}
-        cols = ["patent_1_number", "patent_2_number"]
+    def test_count_nonzero_with_patent_number_ok(self):
+        row  = {"patent_count": 2, "patent_number": "3022097"}
+        cols = ["patent_number"]
         assert check_patent_count("12345678", row, cols) == []
 
-    def test_count_mismatch_error(self):
-        row  = {"patent_count": 3, "patent_1_number": "2709025", "patent_2_number": "2845123"}
-        cols = ["patent_1_number", "patent_2_number"]
+    def test_count_nonzero_no_patent_number_error(self):
+        row  = {"patent_count": 3, "patent_number": None}
+        cols = ["patent_number"]
         findings = check_patent_count("12345678", row, cols)
         assert any(f.check_id == "F1_PATENT_COUNT_MISMATCH" for f in findings)
 
@@ -409,14 +409,14 @@ class TestCheckPatentCount:
         assert check_patent_count("12345678", {"patent_count": 0}, []) == []
 
     def test_long_patent_number_warns(self):
-        row  = {"patent_count": 1, "patent_1_number": "CA 2645810 3022097"}
-        cols = ["patent_1_number"]
+        row  = {"patent_count": 1, "patent_number": "CA 2645810 3022097"}
+        cols = ["patent_number"]
         findings = check_patent_count("12345678", row, cols)
         assert any(f.check_id == "F1_PATENT_NUMBER_LEN" for f in findings)
 
     def test_normal_7digit_ok(self):
-        row  = {"patent_count": 1, "patent_1_number": "2709025"}
-        cols = ["patent_1_number"]
+        row  = {"patent_count": 1, "patent_number": "2709025"}
+        cols = ["patent_number"]
         assert check_patent_count("12345678", row, cols) == []
 
 
@@ -424,7 +424,7 @@ class TestCheckPatentCount:
 
 class TestCheckColumnNames:
     def test_clean_columns_ok(self):
-        assert check_column_names(["din", "brand_name", "patent_1_number", "colour"]) == []
+        assert check_column_names(["din", "brand_name", "patent_number", "color"]) == []
 
     def test_url_column_flagged(self):
         findings = check_column_names(["din", "record_url"])
@@ -434,12 +434,8 @@ class TestCheckColumnNames:
         findings = check_column_names(["din", "active_ingredient_page"])
         assert any(f.check_id == "F1_COL_PAGE" for f in findings)
 
-    def test_us_spelling_flagged(self):
-        findings = check_column_names(["din", "color"])
-        assert any(f.check_id == "F1_COL_SPELLING" for f in findings)
-
-    def test_colour_ok(self):
-        assert check_column_names(["colour"]) == []
+    def test_color_ok(self):
+        assert check_column_names(["color"]) == []
 
 
 # ─── Stage detection ─────────────────────────────────────────────────────────
@@ -447,15 +443,15 @@ class TestCheckColumnNames:
 def _stage_df(**col_vals) -> pd.DataFrame:
     """Build a minimal one-row DataFrame for stage detection tests."""
     defaults: dict = {
-        "din":                 "12345678",
-        "active_ingredient":   "",
-        "excipients_core":     "",
-        "noc_brand_name":      NO_NOC_RECORD,
-        "noc_company":         NO_NOC_RECORD,
-        "noc_date":            NO_NOC_RECORD,
-        "noc_submission_type": NO_NOC_RECORD,
-        "patent_count":        "0",
-        "data_protection_ends": "",
+        "din":                      "12345678",
+        "active_ingredient":        "",
+        "nonmedicinal_ingredients": "",
+        "noc_date":                 NO_NOC_RECORD,
+        "reason_for_supplement":    NO_NOC_RECORD,
+        "submission_class":         NO_NOC_RECORD,
+        "noc_submission_type":      NO_NOC_RECORD,
+        "patent_count":             "0",
+        "data_protection_ends":     "",
     }
     defaults.update(col_vals)
     return pd.DataFrame([defaults])
@@ -464,10 +460,10 @@ def _stage_df(**col_vals) -> pd.DataFrame:
 class TestDetectStages:
     def test_patents_only_labeling_false(self):
         df = _stage_df(
-            patent_1_number="2709025",
-            noc_brand_name=NO_NOC_RECORD,
+            patent_number="2709025",
+            noc_date=NO_NOC_RECORD,
             active_ingredient="",
-            excipients_core="",
+            nonmedicinal_ingredients="",
         )
         stages = detect_stages(df)
         assert stages["PATENTS"] is True
@@ -477,12 +473,12 @@ class TestDetectStages:
     def test_full_workbook_all_stages(self):
         df = _stage_df(
             active_ingredient="alpelisib",
-            excipients_core="microcrystalline cellulose",
-            noc_brand_name="PIQRAY",
-            noc_company="Novartis",
+            nonmedicinal_ingredients="microcrystalline cellulose",
             noc_date="2020-01-01",
+            reason_for_supplement="Initial",
+            submission_class="New",
             noc_submission_type="NDS",
-            patent_1_number="2709025",
+            patent_number="2709025",
             data_protection_ends="2030-01-01",
         )
         stages = detect_stages(df)
@@ -493,9 +489,9 @@ class TestDetectStages:
 
     def test_all_no_noc_record_noc_false(self):
         df = _stage_df(
-            noc_brand_name=NO_NOC_RECORD,
-            noc_company=NO_NOC_RECORD,
             noc_date=NO_NOC_RECORD,
+            reason_for_supplement=NO_NOC_RECORD,
+            submission_class=NO_NOC_RECORD,
             noc_submission_type=NO_NOC_RECORD,
         )
         stages = detect_stages(df)
@@ -516,18 +512,16 @@ class TestFamily1StageAware:
     def _df(self) -> pd.DataFrame:
         return pd.DataFrame([{
             "din": "12345678",
-            "excipients_core": "Debossed tablet heading:",  # would trigger F1_EXCIPIENT_POISON + HEADING_FRAG
-            "excipients_coating": NOT_IN_PM,
+            "nonmedicinal_ingredients": "Debossed tablet heading:",  # triggers F1_EXCIPIENT_POISON + HEADING_FRAG
             "pack_style": NOT_IN_PM,
             "pack_size": NOT_IN_PM,
             "size_mm": NOT_IN_PM,
             "ph": NOT_IN_PM,
-            "preservatives": NOT_IN_PM,
-            "colour": NOT_IN_PM,
+            "color": NOT_IN_PM,
             "shape": NOT_IN_PM,
-            "noc_brand_name": NO_NOC_RECORD,
-            "noc_company": NO_NOC_RECORD,
             "noc_date": NO_NOC_RECORD,
+            "reason_for_supplement": NO_NOC_RECORD,
+            "submission_class": NO_NOC_RECORD,
             "noc_submission_type": NO_NOC_RECORD,
             "noc_therapeutic_class": NO_NOC_RECORD,
             "patent_count": 0,
@@ -545,7 +539,7 @@ class TestFamily1StageAware:
             "F1_EXCIPIENT_POISON", "F1_EXCIPIENT_HEADING_FRAG", "F1_PACK_STYLE_COLON",
             "F1_PACK_STYLE_HDR_TEXT", "F1_PACK_STYLE_NO_VOCAB", "F1_PACK_SIZE_CONTAINER",
             "F1_SIZE_MM_FORMAT", "F1_PH_FORMAT", "F1_PRESERVATIVES_VALUE",
-            "F1_COLOUR_NOVEL", "F1_SHAPE_NOVEL",
+            "F1_COLOR_NOVEL", "F1_SHAPE_NOVEL",
         }
         assert not any(f.check_id in labeling_checks for f in findings)
 
@@ -553,14 +547,13 @@ class TestFamily1StageAware:
         # Even with LABELING=False, patent count mismatch should still fire
         df = pd.DataFrame([{
             "din": "12345678",
-            "noc_brand_name": NO_NOC_RECORD,
-            "noc_company": NO_NOC_RECORD,
             "noc_date": NO_NOC_RECORD,
+            "reason_for_supplement": NO_NOC_RECORD,
+            "submission_class": NO_NOC_RECORD,
             "noc_submission_type": NO_NOC_RECORD,
             "noc_therapeutic_class": NO_NOC_RECORD,
             "patent_count": "3",
-            "patent_1_number": "2709025",
-            # patent_2 and _3 absent
+            "patent_number": None,  # declared 3 but no patent → mismatch
         }])
         findings = run_family1(df, stages={"LABELING": False})
         assert any(f.check_id == "F1_PATENT_COUNT_MISMATCH" for f in findings)
@@ -575,17 +568,15 @@ def _make_df(**kwargs) -> pd.DataFrame:
         "ingredient": "alpelisib",
         "dosage_form": "Tablet",
         "active_ingredient": "alpelisib",
-        "excipients_core": NOT_IN_PM,
-        "excipients_coating": NOT_IN_PM,
-        "preservatives": NOT_IN_PM,
+        "nonmedicinal_ingredients": NOT_IN_PM,
         "ph": NOT_IN_PM,
-        "colour": NOT_IN_PM,
+        "color": NOT_IN_PM,
         "shape": NOT_IN_PM,
         "size_mm": NOT_IN_PM,
         "weight": NOT_IN_PM,
-        "noc_brand_name": NO_NOC_RECORD,
-        "noc_company": NO_NOC_RECORD,
         "noc_date": NO_NOC_RECORD,
+        "reason_for_supplement": NO_NOC_RECORD,
+        "submission_class": NO_NOC_RECORD,
         "noc_submission_type": NO_NOC_RECORD,
         "noc_therapeutic_class": NO_NOC_RECORD,
         "patent_count": 0,
@@ -618,29 +609,29 @@ class TestFamily2Coherence:
 
     def test_pm_mixed_sentinel_error(self):
         df = _make_df(
-            excipients_core="microcrystalline cellulose",
-            excipients_coating=NO_PM_AVAILABLE,
-            preservatives=NO_PM_AVAILABLE,
+            nonmedicinal_ingredients="microcrystalline cellulose",
+            color=NO_PM_AVAILABLE,
+            shape=NO_PM_AVAILABLE,
         )
         findings = run_family2(df, stages={"LABELING": True})
         assert any(f.check_id == "F2_PM_MIXED_SENTINEL" for f in findings)
 
     def test_pm_mixed_sentinel_skipped_without_labeling(self):
         df = _make_df(
-            excipients_core="microcrystalline cellulose",
-            excipients_coating=NO_PM_AVAILABLE,
+            nonmedicinal_ingredients="microcrystalline cellulose",
+            color=NO_PM_AVAILABLE,
         )
         findings = run_family2(df, stages={"LABELING": False})
         assert not any(f.check_id == "F2_PM_MIXED_SENTINEL" for f in findings)
 
-    def test_excipient_no_appearance_warn(self):
+    def test_nm_no_appearance_warn(self):
         df = _make_df(
-            excipients_core="microcrystalline cellulose, stearic acid",
-            colour=NOT_IN_PM,
+            nonmedicinal_ingredients="microcrystalline cellulose, stearic acid",
+            color=NOT_IN_PM,
             shape=NOT_IN_PM,
         )
         findings = run_family2(df, stages={"LABELING": True})
-        assert any(f.check_id == "F2_EXCIPIENT_NO_APPEARANCE" for f in findings)
+        assert any(f.check_id == "F2_NM_NO_APPEARANCE" for f in findings)
 
     def test_weight_no_size_warn(self):
         df = _make_df(weight="250 mg", size_mm=NOT_IN_PM)
@@ -651,14 +642,6 @@ class TestFamily2Coherence:
         df = _make_df(size_mm="9 mm", weight=NOT_IN_PM)
         findings = run_family2(df, stages={"LABELING": True})
         assert any(f.check_id == "F2_SIZE_NO_WEIGHT" for f in findings)
-
-    def test_coating_no_core_error(self):
-        df = _make_df(
-            excipients_core=NOT_IN_PM,
-            excipients_coating="hydroxypropyl methylcellulose, titanium dioxide",
-        )
-        findings = run_family2(df, stages={"LABELING": True})
-        assert any(f.check_id == "F2_COATING_NO_CORE" for f in findings)
 
     def test_dp_past_date_error(self):
         df = _make_df(data_protection_ends="2010-01-01")
@@ -671,10 +654,9 @@ class TestFamily2Coherence:
         findings = run_family2(df)
         assert not any(f.check_id == "F2_DP_PAST_DATE" for f in findings)
 
-    def test_liquid_no_pres_no_ph_warn(self):
+    def test_liquid_no_ph_warn(self):
         df = _make_df(
             dosage_form="Solution for injection",
-            preservatives="N",
             ph=NOT_IN_PM,
         )
         findings = run_family2(df, stages={"LABELING": True})

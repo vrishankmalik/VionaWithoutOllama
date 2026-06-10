@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import (
+    CACHE_DIR,
     CORS_ALLOWED_ORIGINS,
     FABRIC_CONTAINER,
     FABRIC_FOLDER,
@@ -27,8 +28,14 @@ from app.consistency import check_cross_source_consistency
 from app.enrichment.data_protection import fetch_data_protection_table
 from app.enrichment.labeling import enrich_labeling_batch
 from app.enrichment.patents import enrich_patents
-from app.enrichment.store import get_labeling_for_din, reset_labeling_table
-from app.enrichment.workbook import _is_excluded_din, build_sheet1, build_sheet2, build_workbook
+from app.enrichment.store import get_labeling_for_din, reset_labeling_table, reset_patents_table
+from app.enrichment.workbook import (
+    _is_excluded_din,
+    build_exclusion_list,
+    build_sheet1,
+    build_sheet2,
+    build_workbook,
+)
 from app.export_job import run_export_job
 from app.jobs import create_job, get_job
 from app.match import generate_summary
@@ -37,6 +44,7 @@ from app.normalize import normalize_query
 from app.sources.dpd import search_dpd
 from app.sources.generic_submissions import search_generic_submissions
 from app.sources.noc import search_noc
+from app.cache import cache_clear_all
 from app.sources.patent_register import search_patent_register
 
 app = FastAPI(title="Zydus Drug Intelligence Platform", version="1.0.0")
@@ -168,10 +176,55 @@ async def export(
         source_errors=error_sources if allow_partial and error_sources else None,
         dp_table=dp_table,
     )
+
+    # Write sidecar exclusion list alongside the workbook.
+    exclusion_df = build_exclusion_list(result, ingredient_name=q)
+    excl_path = os.path.join(CACHE_DIR, f"{q.replace(' ', '_')}_{field}_excluded.csv")
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    exclusion_df.to_csv(excl_path, index=False)
+    if not exclusion_df.empty:
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "Exclusion list (%d DIN(s)) saved to: %s", len(exclusion_df), excl_path
+        )
+
     filename = f"canadian_drugs_{q.replace(' ', '_')}_{field}.xlsx"
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Exclusion-List": excl_path,
+        },
+    )
+
+
+@app.get("/api/exclusions")
+async def exclusions(
+    q: str = Query(..., description="Ingredient name (same as used for /api/export)"),
+    field: str = Query("ingredient"),
+) -> Response:
+    """Download the exclusion list (CSV) for the last export of this ingredient.
+
+    Returns the DPD DINs that were dropped because they are not present in NOC
+    for the queried ingredient.  The file is written by /api/export; call that
+    first if no file exists yet.
+    """
+    excl_path = os.path.join(CACHE_DIR, f"{q.replace(' ', '_')}_{field}_excluded.csv")
+    if not os.path.exists(excl_path):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No exclusion list found for {q!r}. "
+                "Call /api/export first to generate it."
+            ),
+        )
+    with open(excl_path, "rb") as fh:
+        csv_bytes = fh.read()
+    filename = f"{q.replace(' ', '_')}_{field}_excluded.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -333,11 +386,13 @@ async def fabric_push(
 
 # ── Cache management ──────────────────────────────────────────────────────────
 
-@app.post("/api/reset-labeling-cache")
-async def reset_labeling_cache() -> dict:
-    """Drop and recreate the labeling table, forcing re-extraction on next export."""
-    deleted = reset_labeling_table()
-    return {"status": "ok", "rows_deleted": deleted}
+@app.post("/api/reset-all-caches")
+async def reset_all_caches() -> dict:
+    """Clear all cached data: HTTP cache, patents, and labeling."""
+    http_rows = cache_clear_all()
+    patent_rows = reset_patents_table()
+    labeling_rows = reset_labeling_table()
+    return {"status": "ok", "http_rows_cleared": http_rows, "patent_rows_cleared": patent_rows, "labeling_rows_cleared": labeling_rows}
 
 
 # ── Async export: start / stream / result ─────────────────────────────────────
@@ -725,7 +780,7 @@ _HTML_UI = """<!DOCTYPE html>
   .badge-NOC           { background: var(--badge-noc); }
   .badge-PatentRegister { background: var(--badge-pr); }
 
-  /* ── Status colours ──────────────────────────────────────────────────── */
+  /* ── Status colors ───────────────────────────────────────────────────── */
   .status-ok           { color: var(--ok); font-weight: 600; }
   .status-no_results   { color: var(--muted); }
   .status-error, .status-timeout { color: var(--err); font-weight: 600; }
@@ -988,7 +1043,7 @@ _HTML_UI = """<!DOCTYPE html>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-primary" id="searchBtn" onclick="doSearch()">Search</button>
           <button class="btn btn-export" id="exportBtn" onclick="doExport()" disabled>⬇ Export XLSX</button>
-          <button class="btn" style="background:#888;color:white;font-size:0.8em;padding:4px 10px;" onclick="resetLabelingCache()" title="Clear cached labeling data and force re-extraction on next export">Reset labeling cache</button>
+          <button class="btn" style="background:#888;color:white;font-size:0.8em;padding:4px 10px;" onclick="resetAllCaches()" title="Clear all cached data and force fresh fetches from all sources">Reset cache</button>
         </div>
       </div>
     </div>
@@ -1385,11 +1440,11 @@ function _handleExportEvent(data) {
   if (data.log) _appendLog(`[${data.stage}] ${data.log}`);
 }
 
-async function resetLabelingCache() {
-  if (!confirm('Clear all cached labeling data? The next export will re-fetch from PDFs.')) return;
-  const resp = await fetch('/api/reset-labeling-cache', {method: 'POST'});
+async function resetAllCaches() {
+  if (!confirm('Clear all cached data? The next search will re-fetch live data from all sources.')) return;
+  const resp = await fetch('/api/reset-all-caches', {method: 'POST'});
   const data = await resp.json();
-  alert(`Labeling cache cleared (${data.rows_deleted} rows removed). Next export will re-extract.`);
+  alert(`Cache cleared — ${data.http_rows_cleared} search results, ${data.patent_rows_cleared} patent records, ${data.labeling_rows_cleared} labeling records removed.`);
 }
 
 async function doExport() {

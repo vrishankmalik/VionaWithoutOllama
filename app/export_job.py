@@ -364,7 +364,7 @@ async def run_export_job(
             "elapsed_s": elapsed(), "eta_s": None,
             "log": (
                 f"Assembling {'multi-product ' if n > 1 else ''}two-tab workbook "
-                f"({n} block{'s' if n > 1 else ''}, side-by-side)…"
+                f"({n} ingredient{'s' if n > 1 else ''}, vertical layout)…"
             ),
         })
 

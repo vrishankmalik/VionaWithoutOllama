@@ -157,7 +157,7 @@ All four call sites return empty / `None` with `NullProvider`. The deterministic
 
 ## Multi-Product Export
 
-The export UI accepts multiple ingredients (one per line or comma-separated). Each ingredient becomes one colour-coded horizontal block in the two-tab XLSX:
+The export UI accepts multiple ingredients (one per line or comma-separated). Each ingredient becomes one color-coded horizontal block in the two-tab XLSX:
 
 - **Search** — previews the first ingredient; all N are exported.
 - **`/export/start`** — accepts `queries: ["alpelisib", "apremilast", ...]`; each product is searched and enriched; side-by-side blocks in both sheets.
@@ -215,7 +215,7 @@ All enrichment commands share `$CACHE_DIR/enrichment.db`. Run in order, or use t
 **Cite-or-blank rule:** every extracted value records its page number. Absent fields store `"Not stated"` — never inferred. `_page` is NULL for Not-stated values.
 
 **Sections read:**
-- §6 Dosage Forms/Composition/Packaging: `active_ingredient`, `excipients_core`, `excipients_coating`, `preservatives`, `pack_size`, `pack_style`, `colour`, `shape`, `size_mm`, `weight`.
+- §6 Dosage Forms/Composition/Packaging: `active_ingredient`, `excipients_core`, `excipients_coating`, `preservatives`, `pack_size`, `pack_style`, `color`, `shape`, `size_mm`, `weight`.
 - §13 Pharmaceutical Information: `ph`.
 
 **Per-strength matching:** the DIN's strength (from DPD) selects the matching Description block in §6 — one row per DIN.
@@ -256,7 +256,7 @@ labeling(din, drug_code, pdf_url,
          preservatives, preservatives_page,
          pack_size, pack_size_page,
          pack_style, pack_style_page,
-         colour, colour_page,
+         color, color_page,
          shape, shape_page,
          size_mm, size_mm_page,
          weight, weight_page,
@@ -383,7 +383,7 @@ pytest pytest-asyncio anyio
 - **DPD, NOC, GSUR, Patent Register searches** — fully deterministic. Live comparison against the Ollama version across 20 ingredients confirmed the static-map approach is **more precise**: the Ollama version hallucinated drug-class peers as synonyms (e.g. dabigatran/apixaban for rivaroxaban; ertugliflozin for canagliflozin), producing false positives. The static map never did.
 - **Synonym map coverage** — 85 entries covering salt forms, brand names, and INN variants. Brand name coverage includes all commonly searched biologics and small molecules (dupilumab→dupixent, nivolumab→opdivo, pembrolizumab→keytruda, osimertinib→tagrisso, venetoclax→venclexta, lecanemab→leqembi, etc.). See `app/normalize.py` `_STATIC_SYNONYMS` for the full list.
 - **Excipients, preservatives** — regex extraction; ~90 % coverage on common PM layouts.
-- **Appearance fields (colour, shape, size_mm, weight)** — regex; colour + shape well-covered; size_mm/weight ~60–70 % of PMs.
+- **Appearance fields (color, shape, size_mm, weight)** — regex; color + shape well-covered; size_mm/weight ~60–70 % of PMs.
 - **pH** — regex; ~80 % coverage for liquid/solution PMs.
 - **Data-protection matching** — difflib fuzzy at cutoff 0.8; handles most manufacturer name variations; ambiguous shortlists return blank rather than guessing.
 

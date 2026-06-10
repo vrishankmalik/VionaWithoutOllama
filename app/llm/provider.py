@@ -274,7 +274,7 @@ class AzureOpenAIProvider:
             }
         elif field_group == "appearance":
             fields_desc = {
-                "colour": "Colour(s) of the tablet/capsule/product.",
+                "color": "Color(s) of the tablet/capsule/product.",
                 "shape": "Shape (e.g. round, oval, oblong). Null if absent.",
                 "size_mm": "Dimensions in mm. Null if absent.",
                 "weight": "Weight of the dosage unit in mg. Null if absent.",

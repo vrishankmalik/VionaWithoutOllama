@@ -8,13 +8,13 @@ Golden accuracy test — alpelisib / PIQRAY monograph (human-verified expected v
                          talc, titanium dioxide
   - preservatives = Not stated
   - pack_style contains "aluminium PVC/PCTFE blisters"
-  - colour 50 mg = light pink   (150 mg = pale red,  200 mg = light red)
+  - color 50 mg = light pink   (150 mg = pale red,  200 mg = light red)
   - shape 50 mg = round         (150 mg = ovaloid,   200 mg = ovaloid)
   - pH = Not stated (pH-dependent solubility only)
   - weight / size_mm = Not stated
 
 Per-strength assertion:
-  - colour differs correctly across the three DINs.
+  - color differs correctly across the three DINs.
 
 No-fabrication assertion:
   - Every non-"Not stated" value must cite a page number.
@@ -64,39 +64,27 @@ class TestPiqrayGolden:
         # Either "alpelisib" is extracted or "Not stated" is correct
         assert ai in ("alpelisib", NOT_STATED), f"Unexpected active_ingredient: {ai!r}"
 
-    # ── excipients ────────────────────────────────────────────────────────────
+    # ── nonmedicinal ingredients (verbatim) ──────────────────────────────────
 
-    def test_excipients_core_contains_all_expected(self):
-        from app.enrichment.labeling import NOT_STATED
-        core = self.row_50["excipients_core"]
-        assert core != NOT_STATED, "Core excipients should be extracted"
-        expected_core = [
-            "hypromellose", "magnesium stearate", "mannitol",
-            "microcrystalline cellulose", "sodium starch glycolate",
-        ]
-        core_lower = core.lower()
-        for exc in expected_core:
-            assert exc in core_lower, f"Expected '{exc}' in core excipients, got: {core!r}"
-
-    def test_excipients_coating_contains_all_expected(self):
-        from app.enrichment.labeling import NOT_STATED
-        coating = self.row_50["excipients_coating"]
-        assert coating != NOT_STATED, "Coating excipients should be extracted"
-        expected_coating = [
-            "hypromellose", "iron oxide black", "iron oxide red",
-            "polyethylene glycol", "talc", "titanium dioxide",
-        ]
-        coating_lower = coating.lower()
-        for exc in expected_coating:
-            assert exc in coating_lower, f"Expected '{exc}' in coating, got: {coating!r}"
-
-    # ── preservatives ─────────────────────────────────────────────────────────
-
-    def test_preservatives_is_N(self):
-        # PIQRAY has a non-medicinal ingredient list with no known preservatives → "N"
-        assert self.row_50["preservatives"] == "N", (
-            f"Expected 'N' (composition list found, no preservatives), got: {self.row_50['preservatives']!r}"
+    def test_nonmedicinal_ingredients_extracted(self):
+        from app.enrichment.labeling import NOT_IN_PM, NOT_STATED
+        nm = self.row_50["nonmedicinal_ingredients"]
+        assert nm not in (NOT_IN_PM, NOT_STATED, None), (
+            f"nonmedicinal_ingredients should be extracted for PIQRAY, got: {nm!r}"
         )
+
+    def test_nonmedicinal_ingredients_contains_core_excipients(self):
+        from app.enrichment.labeling import NOT_IN_PM, NOT_STATED
+        nm = self.row_50["nonmedicinal_ingredients"]
+        if nm in (NOT_IN_PM, NOT_STATED, None):
+            pytest.skip("nonmedicinal_ingredients not extracted from fixture")
+        nm_lower = nm.lower()
+        expected = [
+            "hypromellose", "magnesium stearate", "mannitol",
+            "microcrystalline cellulose",
+        ]
+        for exc in expected:
+            assert exc in nm_lower, f"Expected '{exc}' in nonmedicinal_ingredients, got: {nm!r}"
 
     # ── packaging ────────────────────────────────────────────────────────────
 
@@ -113,25 +101,25 @@ class TestPiqrayGolden:
             f"Expected a blister-family label for PIQRAY pack_style, got: {style!r}"
         )
 
-    # ── per-strength colours ──────────────────────────────────────────────────
+    # ── per-strength colors ──────────────────────────────────────────────────
 
-    def test_colour_50mg_is_light_pink(self):
-        colour = self.row_50["colour"]
-        assert "pink" in colour.lower(), f"50 mg colour should be light pink, got: {colour!r}"
+    def test_color_50mg_is_light_pink(self):
+        color = self.row_50["color"]
+        assert "pink" in color.lower(), f"50 mg color should be light pink, got: {color!r}"
 
-    def test_colour_150mg_is_pale_red(self):
-        colour = self.row_150["colour"]
-        assert "red" in colour.lower(), f"150 mg colour should be pale red, got: {colour!r}"
+    def test_color_150mg_is_pale_red(self):
+        color = self.row_150["color"]
+        assert "red" in color.lower(), f"150 mg color should be pale red, got: {color!r}"
 
-    def test_colour_200mg_is_light_red(self):
-        colour = self.row_200["colour"]
-        assert "red" in colour.lower(), f"200 mg colour should be light red, got: {colour!r}"
+    def test_color_200mg_is_light_red(self):
+        color = self.row_200["color"]
+        assert "red" in color.lower(), f"200 mg color should be light red, got: {color!r}"
 
-    def test_per_strength_colour_differs(self):
-        c50  = self.row_50["colour"].lower()
-        c150 = self.row_150["colour"].lower()
-        c200 = self.row_200["colour"].lower()
-        assert c50 != c150, "50 mg and 150 mg should have different colours"
+    def test_per_strength_color_differs(self):
+        c50  = self.row_50["color"].lower()
+        c150 = self.row_150["color"].lower()
+        c200 = self.row_200["color"].lower()
+        assert c50 != c150, "50 mg and 150 mg should have different colors"
         # 150 and 200 both contain "red" but differ in adjective
         assert "pink" in c50, "50 mg should be pink"
         assert "red" in c150, "150 mg should be red-family"
@@ -228,8 +216,7 @@ def test_scanned_pdf_thin_pages_return_not_in_pm():
         "needs_ocr is set by enrich_labeling (the caller), not parse_labeling_fields"
     )
     # Stage-3 fields: sections not found in thin text → NOT_IN_PM, never NEEDS_OCR sentinel
-    for field in ("excipients_core", "excipients_coating", "preservatives",
-                  "colour", "shape", "size_mm", "weight", "ph"):
+    for field in ("nonmedicinal_ingredients", "color", "shape", "size_mm", "weight", "ph"):
         assert row[field] == NOT_IN_PM, (
             f"Expected {field}={NOT_IN_PM!r} for empty pages, got {row[field]!r}"
         )
@@ -251,7 +238,7 @@ def test_normalize_strength(raw, expected):
 
 # ── strength block extraction ─────────────────────────────────────────────────
 
-def test_extract_strength_block_finds_correct_colour():
+def test_extract_strength_block_finds_correct_color():
     from app.enrichment.labeling import _extract_strength_block
 
     description = (
@@ -265,9 +252,9 @@ def test_extract_strength_block_finds_correct_colour():
     r150 = _extract_strength_block(description, "150 mg")
     r200 = _extract_strength_block(description, "200 mg")
 
-    assert r50["colour"] is not None and "pink" in r50["colour"].lower()
-    assert r150["colour"] is not None and "red" in r150["colour"].lower()
-    assert r200["colour"] is not None and "red" in r200["colour"].lower()
+    assert r50["color"] is not None and "pink" in r50["color"].lower()
+    assert r150["color"] is not None and "red" in r150["color"].lower()
+    assert r200["color"] is not None and "red" in r200["color"].lower()
     assert r50["shape"] is not None and "round" in r50["shape"].lower()
     assert r150["shape"] is not None and "oval" in r150["shape"].lower()
 

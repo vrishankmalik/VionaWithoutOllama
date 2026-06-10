@@ -38,34 +38,30 @@ CREATE TABLE IF NOT EXISTS patent_discrepancies (
 );
 
 CREATE TABLE IF NOT EXISTS labeling (
-    din                     TEXT PRIMARY KEY,
-    drug_code               INTEGER,
-    pdf_url                 TEXT,
-    active_ingredient       TEXT,
-    active_ingredient_page  INTEGER,
-    excipients_core         TEXT,
-    excipients_core_page    INTEGER,
-    excipients_coating      TEXT,
-    excipients_coating_page INTEGER,
-    preservatives           TEXT,
-    preservatives_page      INTEGER,
-    pack_size               TEXT,
-    pack_size_page          INTEGER,
-    pack_style              TEXT,
-    pack_style_page         INTEGER,
-    colour                  TEXT,
-    colour_page             INTEGER,
-    shape                   TEXT,
-    shape_page              INTEGER,
-    size_mm                 TEXT,
-    size_mm_page            INTEGER,
-    weight                  TEXT,
-    weight_page             INTEGER,
-    ph                      TEXT,
-    ph_page                 INTEGER,
-    needs_ocr               INTEGER NOT NULL DEFAULT 0,
-    has_unverified          INTEGER NOT NULL DEFAULT 0,
-    fetched_at              REAL NOT NULL
+    din                             TEXT PRIMARY KEY,
+    drug_code                       INTEGER,
+    pdf_url                         TEXT,
+    active_ingredient               TEXT,
+    active_ingredient_page          INTEGER,
+    nonmedicinal_ingredients        TEXT,
+    nonmedicinal_ingredients_page   INTEGER,
+    pack_size                       TEXT,
+    pack_size_page                  INTEGER,
+    pack_style                      TEXT,
+    pack_style_page                 INTEGER,
+    color                           TEXT,
+    color_page                      INTEGER,
+    shape                           TEXT,
+    shape_page                      INTEGER,
+    size_mm                         TEXT,
+    size_mm_page                    INTEGER,
+    weight                          TEXT,
+    weight_page                     INTEGER,
+    ph                              TEXT,
+    ph_page                         INTEGER,
+    needs_ocr                       INTEGER NOT NULL DEFAULT 0,
+    has_unverified                  INTEGER NOT NULL DEFAULT 0,
+    fetched_at                      REAL NOT NULL
 );
 """
 
@@ -74,16 +70,12 @@ _lock = threading.RLock()  # reentrant — write operations call get_conn() whil
 
 
 _LABELING_MIGRATIONS = (
-    # columns added when excipients were split from nonmedicinal_ingredients
-    "excipients_core TEXT",
-    "excipients_core_page INTEGER",
-    "excipients_coating TEXT",
-    "excipients_coating_page INTEGER",
-    "preservatives TEXT",
-    "preservatives_page INTEGER",
+    # nonmedicinal_ingredients replaces excipients_core/coating/preservatives
+    "nonmedicinal_ingredients TEXT",
+    "nonmedicinal_ingredients_page INTEGER",
     # columns present in older schemas that new code still writes
-    "colour TEXT",
-    "colour_page INTEGER",
+    "color TEXT",
+    "color_page INTEGER",
     "pack_style TEXT",
     "pack_style_page INTEGER",
     "size_mm TEXT",
@@ -185,12 +177,10 @@ def get_discrepancies() -> list[dict]:
 _LABELING_COLS = (
     "din", "drug_code", "pdf_url",
     "active_ingredient", "active_ingredient_page",
-    "excipients_core", "excipients_core_page",
-    "excipients_coating", "excipients_coating_page",
-    "preservatives", "preservatives_page",
+    "nonmedicinal_ingredients", "nonmedicinal_ingredients_page",
     "pack_size", "pack_size_page",
     "pack_style", "pack_style_page",
-    "colour", "colour_page",
+    "color", "color_page",
     "shape", "shape_page",
     "size_mm", "size_mm_page",
     "weight", "weight_page",
@@ -229,6 +219,18 @@ def is_labeling_stale(din: str, ttl: float) -> bool:
     if row is None:
         return True
     return (time.time() - row["fetched_at"]) > ttl
+
+
+def reset_patents_table() -> int:
+    """Drop and recreate the patents and patent_discrepancies tables. Returns rows deleted."""
+    with _lock:
+        conn = get_conn()
+        count = conn.execute("SELECT COUNT(*) FROM patents").fetchone()[0]
+        conn.execute("DROP TABLE IF EXISTS patents")
+        conn.execute("DROP TABLE IF EXISTS patent_discrepancies")
+        conn.executescript(_DDL)
+        conn.commit()
+        return count
 
 
 def reset_labeling_table() -> int:

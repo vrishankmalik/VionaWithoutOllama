@@ -245,7 +245,7 @@ def print_coverage(all_rows: list[dict]) -> None:
     fields = (
         "active_ingredient", "pack_size", "pack_style",
         "excipients_core", "excipients_coating", "preservatives",
-        "ph", "colour", "shape", "size_mm", "weight",
+        "ph", "color", "shape", "size_mm", "weight",
     )
     header = f"{'Field':<25} {'Real value':>10} {'Not in PM':>10} {'Blank':>7}"
     print("\n" + "=" * 60)
@@ -361,7 +361,7 @@ async def main() -> int:
 
         stage3_fields = (
             "excipients_core", "excipients_coating", "preservatives",
-            "ph", "colour", "shape", "size_mm", "weight",
+            "ph", "color", "shape", "size_mm", "weight",
         )
         for field in stage3_fields:
             val = r.get(field, "")

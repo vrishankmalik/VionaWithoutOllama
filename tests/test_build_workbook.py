@@ -24,6 +24,25 @@ def _make_response(
     gsur_records: list[DrugRecord] | None = None,
     query: str = "alpelisib",
 ) -> SearchResponse:
+    # When noc_records is not supplied, auto-generate one NOC stub per DPD DIN so
+    # that build_sheet1 (which now sources its DIN universe from NOC) still produces
+    # rows.  Tests that specifically exercise NOC logic pass noc_records explicitly.
+    if noc_records is None and dpd_records:
+        from app.models import DrugRecord as _DR
+        noc_records = [
+            _DR(
+                source="NOC", din=r.din, brand_name=r.brand_name,
+                source_specific={
+                    "noc_date": "2019-01-01",
+                    "submission_type": "NDS",
+                    "submission_class": "New",
+                    "reason_for_supplement": None,
+                    "therapeutic_class": "Test",
+                },
+            )
+            for r in dpd_records
+            if r.din and r.din.strip().lower() not in {"", "not applicable", "n/a", "na", "none"}
+        ]
     sources = []
     if dpd_records is not None:
         sources.append(SourceResult(source="DPD", status="ok", records=dpd_records))
@@ -60,7 +79,13 @@ def _noc(din: str, brand: str = "BRAND", submission_type: str = "NDS") -> DrugRe
         brand_name=brand,
         company="Novartis",
         ingredient="alpelisib",
-        source_specific={"noc_date": "2019-05-24", "submission_type": submission_type},
+        source_specific={
+            "noc_date": "2019-05-24",
+            "submission_type": submission_type,
+            "submission_class": "New",
+            "reason_for_supplement": None,
+            "therapeutic_class": "Oncology",
+        },
     )
 
 
@@ -204,19 +229,18 @@ def test_build_workbook_returns_xlsx():
 def test_build_workbook_sheet1_has_patent_columns(tmp_path):
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
-    # Add a patent so the patent_1_* group isn't dropped by the all-empty cleanup
     store_mod.upsert_patent("02498014", "2709025", "2008-12-10", "2014-08-26", "2028-12-10")
 
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(dpd_records=[_dpd("02498014")])
     df = build_sheet1(response)
-    # Wide patent columns must be present (patent data was added)
     assert "patent_count" in df.columns, "patent_count missing"
-    assert "patent_1_number" in df.columns, "patent_1_number missing"
-    assert "patent_1_filing_date" in df.columns, "patent_1_filing_date missing"
-    assert "patent_1_expiry_date" in df.columns, "patent_1_expiry_date missing"
-    # Old merged-string columns must be absent
+    assert "patent_number" in df.columns, "patent_number missing"
+    assert "patent_grant_date" in df.columns, "patent_grant_date missing"
+    assert "patent_expiry_date" in df.columns, "patent_expiry_date missing"
+    # Old wide columns must be absent
+    assert "patent_1_number" not in df.columns, "stale patent_1_number column present"
     assert "patent_numbers" not in df.columns, "stale patent_numbers column present"
     assert "all_patents_detail" not in df.columns, "stale all_patents_detail column present"
 
@@ -229,7 +253,7 @@ def test_build_workbook_sheet1_has_labeling_columns(tmp_path):
     # all-empty cleanup (Change 2).  These sentinels are real values ("Not in PM"
     # / "No PM available"), so the columns must be kept.
     store_mod.upsert_labeling("02498014", {
-        "colour": "pink", "shape": "round", "ph": "Not stated",
+        "color": "pink", "shape": "round", "ph": "Not stated",
         "needs_ocr": 0, "has_unverified": 0, "drug_code": 99001,
         "fetched_at": time.time(),
     })
@@ -238,34 +262,30 @@ def test_build_workbook_sheet1_has_labeling_columns(tmp_path):
 
     response = _make_response(dpd_records=[_dpd("02498014")])
     df = build_sheet1(response)
-    for col in ("colour", "shape", "ph"):
+    for col in ("color", "shape", "ph"):
         assert col in df.columns, f"Expected labeling column '{col}' in Sheet 1"
 
 
 # ── Test 5: patent block aggregation ─────────────────────────────────────────
 
 def test_patent_aggregation(tmp_path):
-    """_aggregate_patents_wide correctly produces wide columns for multiple patents."""
+    """_aggregate_patents_latest selects the latest-expiry patent."""
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
 
     store_mod.upsert_patent("02498014", "2709025", "2008-12-10", "2014-08-26", "2028-12-10")
     store_mod.upsert_patent("02498014", "2900000", "2015-01-01", "2020-03-01", "2035-01-01")
 
-    from app.enrichment.workbook import _aggregate_patents_wide
-    agg = _aggregate_patents_wide("02498014", 2)
+    from app.enrichment.workbook import _aggregate_patents_latest
+    agg = _aggregate_patents_latest("02498014")
 
     assert agg["patent_count"] == 2
-    # Both patent numbers must appear across the two groups (order is expiry-desc from store)
-    patent_numbers = {agg["patent_1_number"], agg["patent_2_number"]}
-    assert "2709025" in patent_numbers
-    assert "2900000" in patent_numbers
-    # Dates must be attached to the correct group
-    for i in (1, 2):
-        if agg[f"patent_{i}_number"] == "2709025":
-            assert agg[f"patent_{i}_filing_date"] == "2008-12-10"
-        elif agg[f"patent_{i}_number"] == "2900000":
-            assert agg[f"patent_{i}_filing_date"] == "2015-01-01"
+    # 2900000 has the later expiry (2035 vs 2028) — must be selected
+    assert agg["patent_number"] == "2900000", (
+        f"Expected 2900000 (latest expiry), got {agg['patent_number']!r}"
+    )
+    assert agg["patent_grant_date"] == "2020-03-01"
+    assert agg["patent_expiry_date"] == "2035-01-01"
 
 
 # ── Test 6: fail-loud guard — error-vs-no_results distinction ─────────────────
@@ -380,34 +400,31 @@ async def test_export_allow_partial_builds_with_warning(mock_noc, mock_dpd, mock
 # ── Test 7: SNDS/SANDS filtering ─────────────────────────────────────────────
 
 def test_snds_rows_excluded_from_sheet1():
-    """NOC records with SNDS or SANDS submission types must be dropped from Sheet 1."""
+    """NOC records with SNDS submission types are filtered; the DIN only appears if
+    it also has a non-SNDS NOC entry or appears with a different DIN in NOC."""
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(
         dpd_records=[_dpd("02498014"), _dpd("02498022")],
         noc_records=[
             _noc("02498014", submission_type="NDS"),                             # keep
-            _noc("02498022", submission_type="Supplement to a New Drug Submission (SNDS)"),  # drop
+            _noc("02498022", submission_type="Supplement to a New Drug Submission (SNDS)"),  # filtered
         ],
     )
     df = build_sheet1(response)
 
-    # Both DPD DINs must appear (they're DPD products)
+    # 02498014 (NDS) must appear; 02498022 (SNDS-only) is excluded from NOC universe → not in sheet
     dins = set(df["din"].astype(str))
     assert "02498014" in dins
-    assert "02498022" in dins
-
-    # 02498014 should have real NOC data; 02498022 should have "No NOC record"
-    row_nds = df[df["din"] == "02498014"].iloc[0]
-    row_snds = df[df["din"] == "02498022"].iloc[0]
-    assert row_nds["noc_submission_type"] == "NDS"
-    assert row_snds["noc_submission_type"] == "No NOC record", (
-        f"Expected 'No NOC record' for filtered SNDS row, got: {row_snds['noc_submission_type']!r}"
+    assert "02498022" not in dins, (
+        "DIN with only an SNDS NOC entry is filtered from NOC universe and must not appear"
     )
+    row_nds = df[df["din"] == "02498014"].iloc[0]
+    assert row_nds["noc_submission_type"] == "NDS"
 
 
 def test_sands_rows_excluded_from_sheet1():
-    """SANDS submissions must also be dropped."""
+    """SANDS-only DIN has no NOC entry after filtering → excluded from sheet entirely."""
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(
@@ -417,13 +434,19 @@ def test_sands_rows_excluded_from_sheet1():
         ],
     )
     df = build_sheet1(response)
-    row = df[df["din"] == "02498022"].iloc[0]
-    assert row["noc_submission_type"] == "No NOC record"
+    # SANDS is filtered → NOC has no valid DIN → sheet is empty
+    assert df.empty or "02498022" not in set(df["din"].astype(str)), (
+        "DIN with only a SANDS NOC entry must be excluded from Sheet 1"
+    )
 
 
-def test_no_noc_record_din_gets_sentinel():
-    """A DPD DIN with no matching NOC record gets 'No NOC record' in all noc_* columns."""
-    from app.enrichment.workbook import build_sheet1
+def test_dpd_only_din_excluded_from_sheet():
+    """A DPD DIN with no matching NOC record is excluded from Sheet 1.
+
+    Under the NOC-authoritative rule, DPD-only DINs do not appear in Sheet 1;
+    they appear in the exclusion list (build_exclusion_list) instead.
+    """
+    from app.enrichment.workbook import build_sheet1, build_exclusion_list
 
     # DPD record for 02498022 but no NOC record for it
     response = _make_response(
@@ -432,23 +455,27 @@ def test_no_noc_record_din_gets_sentinel():
     )
     df = build_sheet1(response)
 
-    row_with_noc = df[df["din"] == "02498014"].iloc[0]
-    row_no_noc = df[df["din"] == "02498022"].iloc[0]
+    # 02498014 appears with real NOC data; 02498022 is excluded (DPD-only)
+    dins = set(df["din"].astype(str))
+    assert "02498014" in dins
+    assert "02498022" not in dins, "DPD-only DIN must not appear in Sheet 1"
 
-    # Row with NOC match should have real data
+    row_with_noc = df[df["din"] == "02498014"].iloc[0]
     assert row_with_noc["noc_submission_type"] == "NDS"
     assert row_with_noc["noc_date"] == "2019-05-24"
 
-    # Row without NOC match should have sentinel in every noc_* column
-    for col in ("noc_brand_name", "noc_company", "noc_date",
-                "noc_submission_type", "noc_therapeutic_class"):
-        assert row_no_noc[col] == "No NOC record", (
-            f"Expected 'No NOC record' in column '{col}', got: {row_no_noc[col]!r}"
-        )
+    # 02498022 must appear in the exclusion list
+    excl = build_exclusion_list(response)
+    assert "02498022" in set(excl["din"].values)
 
 
 def test_noc_only_column_values_after_filtering():
-    """After SNDS/SANDS filtering, only NDS, ANDS, and 'No NOC record' appear in noc_submission_type."""
+    """After SNDS/SANDS filtering, only NDS and ANDS appear in noc_submission_type.
+
+    SNDS-only DINs are excluded from the NOC universe and therefore absent from
+    Sheet 1 entirely — 'No NOC record' never appears since all included DINs come
+    from NOC.
+    """
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(
@@ -461,7 +488,9 @@ def test_noc_only_column_values_after_filtering():
     )
     df = build_sheet1(response)
 
-    allowed = {"NDS", "ANDS", "No NOC record"}
+    # 02498030 (SNDS-only) is excluded; only 02498014 and 02498022 appear
+    assert set(df["din"].astype(str)) == {"02498014", "02498022"}
+    allowed = {"NDS", "ANDS"}
     for val in df["noc_submission_type"].dropna():
         assert str(val) in allowed, (
             f"Unexpected noc_submission_type in Sheet 1: {val!r}"
@@ -479,71 +508,59 @@ def test_no_pm_available_constant_exported():
 
 # ── Test 9: Change 2 — all-empty column cleanup ──────────────────────────────
 
-def test_empty_patent_groups_dropped(tmp_path):
-    """When no DIN has patents, all patent_N_* groups must be dropped.
+def test_empty_patents_columns_present_with_none(tmp_path):
+    """When no DIN has patents, patent_number/grant_date/expiry_date are None.
 
-    patent_count stays (0 is a real integer value, not empty); the four-column
-    patent_1_* group is dropped because every cell is None.
+    patent_count stays (0 is a real integer, not empty); patent_number etc. are
+    in _NEVER_DROP_COLS so they must also be kept.
     """
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
-    # Do NOT add any patents → all patent_N_* cols will be None
 
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
     df = build_sheet1(response)
 
-    # The four-column patent group must have been dropped
-    assert "patent_1_number" not in df.columns, (
-        "patent_1_number must be dropped when no DINs have patents"
-    )
-    assert "patent_1_filing_date" not in df.columns
-    assert "patent_1_grant_date" not in df.columns
-    assert "patent_1_expiry_date" not in df.columns
-    # patent_count is 0 (integer) → not empty → must stay
     assert "patent_count" in df.columns, "patent_count must stay even when all counts are 0"
+    assert "patent_number" in df.columns, "patent_number must stay (in _NEVER_DROP_COLS)"
+    # Old wide-format columns must not exist
+    assert "patent_1_number" not in df.columns
+    assert "patent_1_filing_date" not in df.columns
 
 
-def test_patent_group_kept_when_one_din_has_patent(tmp_path):
-    """When even one DIN has a patent, the patent_N_* group must be kept
-    for ALL rows (trailing DINs get None in those cols, which is correct)."""
+def test_patent_number_present_for_din_with_patent(tmp_path):
+    """A DIN with a patent gets the latest-expiry patent_number; a DIN without gets None."""
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
     store_mod.upsert_patent("02498014", "2709025", "2008-12-10", "2014-08-26", "2028-12-10")
-    # 02498022 has no patents but the group must still exist because 02498014 does
 
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
     df = build_sheet1(response)
 
-    assert "patent_1_number" in df.columns, "patent_1_number must be kept (02498014 has a patent)"
+    assert "patent_number" in df.columns
     row_with = df[df["din"] == "02498014"].iloc[0]
     row_without = df[df["din"] == "02498022"].iloc[0]
-    assert row_with["patent_1_number"] == "2709025"
-    assert row_without["patent_1_number"] is None or str(row_without["patent_1_number"]) in (
+    assert row_with["patent_number"] == "2709025"
+    assert row_without["patent_number"] is None or str(row_without["patent_number"]) in (
         "None", "nan", ""
     )
 
 
-def test_sentinel_values_prevent_column_drop(tmp_path):
-    """Columns containing only sentinel strings ('No NOC record', 'No PM available')
-    must NOT be dropped — sentinels convey real information."""
+def test_noc_columns_always_present(tmp_path):
+    """NOC columns are never pruned — they are in _NEVER_DROP_COLS."""
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
 
     from app.enrichment.workbook import build_sheet1
 
-    # DPD record only → noc_* columns get "No NOC record" sentinel
     response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
     df = build_sheet1(response)
 
-    # All rows have "No NOC record" in noc_brand_name — must NOT be dropped
-    assert "noc_brand_name" in df.columns, (
-        "noc_brand_name must be kept even when all values are the 'No NOC record' sentinel"
-    )
-    assert "noc_submission_type" in df.columns
+    for col in ("noc_date", "noc_submission_type", "reason_for_supplement", "submission_class"):
+        assert col in df.columns, f"{col} must always be present (in _NEVER_DROP_COLS)"
 
 
 def test_single_nonempty_row_prevents_column_drop(tmp_path):
@@ -553,20 +570,20 @@ def test_single_nonempty_row_prevents_column_drop(tmp_path):
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
 
-    # Give one DIN a labeling colour; other DIN has nothing
+    # Give one DIN a labeling color; other DIN has nothing
     store_mod.upsert_labeling("02498014", {
-        "colour": "blue", "needs_ocr": 0, "has_unverified": 0,
+        "color": "blue", "needs_ocr": 0, "has_unverified": 0,
         "drug_code": 99001, "fetched_at": time.time(),
     })
-    # 02498022 has no labeling → colour=None for that row
+    # 02498022 has no labeling → color=None for that row
 
     from app.enrichment.workbook import build_sheet1
 
     response = _make_response(dpd_records=[_dpd("02498014"), _dpd("02498022")])
     df = build_sheet1(response)
 
-    assert "colour" in df.columns, (
-        "colour must be kept: 02498014 has a non-empty value even though 02498022 is None"
+    assert "color" in df.columns, (
+        "color must be kept: 02498014 has a non-empty value even though 02498022 is None"
     )
 
 

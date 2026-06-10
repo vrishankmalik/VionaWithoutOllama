@@ -97,11 +97,11 @@ def detect_stages(df: pd.DataFrame) -> dict[str, bool]:
         return False
 
     labeling_cols = [
-        "active_ingredient", "excipients_core", "excipients_coating",
-        "preservatives", "ph", "colour", "shape", "size_mm", "weight",
+        "active_ingredient", "nonmedicinal_ingredients",
+        "ph", "color", "shape", "size_mm", "weight",
     ]
-    patent_cols = [c for c in cols if re.match(r"patent_\d+_number$", c)]
-    noc_data_cols = ["noc_brand_name", "noc_company", "noc_date", "noc_submission_type"]
+    patent_cols = [c for c in cols if c == "patent_number"]
+    noc_data_cols = ["noc_date", "reason_for_supplement", "submission_class", "noc_submission_type"]
 
     noc_present = False
     for col in noc_data_cols:
@@ -215,12 +215,12 @@ _CONTAINER_KEYWORDS: frozenset[str] = frozenset({
     "suppository", "pen", "kit",
 })
 
-_KNOWN_COLOURS: frozenset[str] = frozenset({
+_KNOWN_COLORS: frozenset[str] = frozenset({
     "white", "red", "pink", "orange", "yellow", "green", "blue", "purple",
     "violet", "brown", "beige", "grey", "gray", "black", "cream", "tan",
     "teal", "maroon", "ivory",
 })
-_COLOUR_MODIFIERS: frozenset[str] = frozenset({"light", "pale", "dark", "bright", "deep", "off"})
+_COLOR_MODIFIERS: frozenset[str] = frozenset({"light", "pale", "dark", "bright", "deep", "off"})
 
 _KNOWN_SHAPES: frozenset[str] = frozenset({
     "round", "oval", "ovaloid", "oblong", "capsule-shaped", "capsule shaped",
@@ -228,7 +228,7 @@ _KNOWN_SHAPES: frozenset[str] = frozenset({
     "diamond", "shield", "kidney", "bean",
 })
 
-_NOC_DATA_COLS = ["noc_brand_name", "noc_company", "noc_date", "noc_submission_type"]
+_NOC_DATA_COLS = ["noc_date", "reason_for_supplement", "submission_class", "noc_submission_type"]
 _NOC_COLS = _NOC_DATA_COLS + ["noc_therapeutic_class"]
 
 # Patterns that must NOT appear in excipient fields
@@ -350,17 +350,17 @@ def check_preservatives(din: str, val: Any) -> list[Finding]:
     return []
 
 
-def check_colour(din: str, val: Any) -> list[Finding]:
-    """Each comma/slash-separated part must contain at least one known colour word."""
+def check_color(din: str, val: Any) -> list[Finding]:
+    """Each comma/slash-separated part must contain at least one known color word."""
     if _is_sentinel(val):
         return []
     s     = str(val).strip().lower()
     parts = [p.strip() for p in re.split(r"[,/]+", s) if p.strip()]
     out: list[Finding] = []
     for part in parts:
-        if not any(re.search(r"\b" + re.escape(c) + r"\b", part) for c in _KNOWN_COLOURS):
-            out.append(Finding("F1_COLOUR_NOVEL", din, "colour", "WARN", str(val)[:80],
-                               f"Colour part '{part}' contains no known colour vocab word", 1))
+        if not any(re.search(r"\b" + re.escape(c) + r"\b", part) for c in _KNOWN_COLORS):
+            out.append(Finding("F1_COLOR_NOVEL", din, "color", "WARN", str(val)[:80],
+                               f"Color part '{part}' contains no known color vocab word", 1))
     return out
 
 
@@ -424,25 +424,19 @@ def check_patent_count(din: str, row: dict, patent_cols: list[str]) -> list[Find
         declared = int(float(str(raw)))
     except ValueError:
         return []
-    actual = sum(
-        1 for c in patent_cols
-        if re.match(r"patent_\d+_number$", c) and _is_real(row.get(c))
-    )
+    # Collapsed format: patent_number column holds the single latest-expiry patent.
+    actual = 1 if _is_real(row.get("patent_number")) else 0
     out: list[Finding] = []
-    if declared != actual:
-        out.append(Finding("F1_PATENT_COUNT_MISMATCH", din, "patent_count", "ERROR",
+    if declared > 0 and actual == 0:
+        out.append(Finding("F1_PATENT_COUNT_MISMATCH", din, "patent_count", "WARN",
                            str(declared),
-                           f"patent_count={declared} but {actual} patent_N_number columns populated", 1))
-    for col in patent_cols:
-        if not re.match(r"patent_\d+_number$", col):
-            continue
-        pn = row.get(col)
-        if not _is_real(pn):
-            continue
+                           f"patent_count={declared} but patent_number column is empty", 1))
+    pn = row.get("patent_number")
+    if _is_real(pn):
         clean = re.sub(r"(?i)^\s*ca\s*", "", str(pn).strip())
         clean = re.sub(r"[,\s]+", "", clean)
         if len(clean) > 8:
-            out.append(Finding("F1_PATENT_NUMBER_LEN", din, col, "WARN", str(pn)[:20],
+            out.append(Finding("F1_PATENT_NUMBER_LEN", din, "patent_number", "WARN", str(pn)[:20],
                                f"Patent number '{clean}' exceeds 8 chars (merged or malformed?)", 1))
     return out
 
@@ -456,9 +450,6 @@ def check_column_names(columns: list[str]) -> list[Finding]:
         if col.endswith("_page"):
             out.append(Finding("F1_COL_PAGE", "(header)", col, "ERROR", col,
                                "_page citation columns removed in Change 2; must not appear", 1))
-        if "color" in col.lower() and "colour" not in col.lower():
-            out.append(Finding("F1_COL_SPELLING", "(header)", col, "ERROR", col,
-                               "Column uses 'color' (US); must be 'colour' (CA)", 1))
     return out
 
 
@@ -487,14 +478,13 @@ def run_family1(
         rdict = dict(row)
 
         if labeling_active:
-            out.extend(check_excipient_field(din, "excipients_core",    rdict.get("excipients_core")))
-            out.extend(check_excipient_field(din, "excipients_coating", rdict.get("excipients_coating")))
+            out.extend(check_excipient_field(din, "nonmedicinal_ingredients",
+                                             rdict.get("nonmedicinal_ingredients")))
             out.extend(check_pack_style(din, rdict.get("pack_style")))
             out.extend(check_pack_size(din,  rdict.get("pack_size")))
             out.extend(check_size_mm(din,    rdict.get("size_mm")))
             out.extend(check_ph(din,         rdict.get("ph")))
-            out.extend(check_preservatives(din, rdict.get("preservatives")))
-            out.extend(check_colour(din,     rdict.get("colour")))
+            out.extend(check_color(din,      rdict.get("color")))
             out.extend(check_shape(din,      rdict.get("shape")))
 
         out.extend(check_noc_consistency(din, rdict))
@@ -506,8 +496,8 @@ def run_family1(
 # ─── Family 2: Cross-field coherence ─────────────────────────────────────────
 
 _PM_FIELDS = frozenset({
-    "excipients_core", "excipients_coating", "preservatives",
-    "ph", "colour", "shape", "size_mm", "weight",
+    "nonmedicinal_ingredients",
+    "ph", "color", "shape", "size_mm", "weight",
 })
 _LIQUID_FORMS = frozenset({
     "solution", "liquid", "injection", "infusion",
@@ -553,14 +543,14 @@ def run_family2(
                                    "PM demonstrably exists: some fields populated, others say "
                                    "'No PM available'", 2))
 
-            exc_real   = (_is_real(rdict.get("excipients_core")) and
-                          not _is_no_pm(rdict.get("excipients_core")))
-            clr_absent = _is_sentinel(rdict.get("colour")) or _is_no_pm(rdict.get("colour"))
+            nm_real    = (_is_real(rdict.get("nonmedicinal_ingredients")) and
+                          not _is_no_pm(rdict.get("nonmedicinal_ingredients")))
+            clr_absent = _is_sentinel(rdict.get("color")) or _is_no_pm(rdict.get("color"))
             shp_absent = _is_sentinel(rdict.get("shape"))  or _is_no_pm(rdict.get("shape"))
-            if exc_real and clr_absent and shp_absent:
-                out.append(Finding("F2_EXCIPIENT_NO_APPEARANCE", din, "colour,shape", "WARN",
-                                   str(rdict.get("excipients_core"))[:60],
-                                   "Excipients populated but both colour and shape absent — "
+            if nm_real and clr_absent and shp_absent:
+                out.append(Finding("F2_NM_NO_APPEARANCE", din, "color,shape", "WARN",
+                                   str(rdict.get("nonmedicinal_ingredients"))[:60],
+                                   "nonmedicinal_ingredients populated but both color and shape absent — "
                                    "same §6 section", 2))
 
             wt_real   = _is_real(rdict.get("weight"))  and not _is_no_pm(rdict.get("weight"))
@@ -578,23 +568,11 @@ def run_family2(
 
             dosage   = str(rdict.get("dosage_form") or "").lower()
             is_liq   = any(w in dosage for w in _LIQUID_FORMS)
-            pres_val = str(rdict.get("preservatives") or "").strip()
             ph_val   = rdict.get("ph")
-            if is_liq and pres_val == "N" and _is_sentinel(ph_val):
+            if is_liq and _is_sentinel(ph_val):
                 out.append(Finding("F2_LIQUID_NO_PH", din, "ph", "WARN",
-                                   f"dosage_form={rdict.get('dosage_form')}, preservatives=N",
-                                   "Liquid dosage form with preservatives=N and no pH — both expected", 2))
-
-            core_val  = rdict.get("excipients_core")
-            coat_val  = rdict.get("excipients_coating")
-            coat_real = (_is_real(coat_val) and not _is_no_pm(coat_val)
-                         and str(coat_val).strip() != NA_UNCOATED)
-            core_absent = _is_sentinel(core_val) or _is_no_pm(core_val)
-            if coat_real and core_absent:
-                out.append(Finding("F2_COATING_NO_CORE", din, "excipients_core", "ERROR",
-                                   str(coat_val)[:60],
-                                   "excipients_coating populated but excipients_core absent — "
-                                   "must appear as a pair", 2))
+                                   f"dosage_form={rdict.get('dosage_form')}",
+                                   "Liquid dosage form with no pH — expected for liquid/solution", 2))
 
         dp_ends = rdict.get("data_protection_ends")
         if dp_ends and _is_real(dp_ends):
@@ -976,7 +954,7 @@ async def run_family3(
     if stages is None:
         stages = {}
     sample_set  = set(sample_dins)
-    patent_cols = [c for c in df.columns if re.match(r"patent_\d+_number$", c)]
+    patent_cols = [c for c in df.columns if c == "patent_number"]
 
     tasks: list = []
     async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
@@ -994,10 +972,6 @@ async def run_family3(
                 tasks.append(_check_pack_live(
                     client, cache, din, dc,
                     rdict.get("pack_size"), rdict.get("pack_style")))
-                tasks.append(_check_excipients_pdf(
-                    client, cache, din, dc,
-                    rdict.get("excipients_core"), rdict.get("excipients_coating"),
-                    needs_ocr=nocr))
 
             if stages.get("PATENTS", True):
                 pnums = [str(rdict.get(c)).strip() for c in patent_cols if _is_real(rdict.get(c))]
@@ -1026,8 +1000,8 @@ async def run_family3(
 # ─── Family 4: Determinism + OCR ─────────────────────────────────────────────
 
 _EXTRACT_FIELDS = (
-    "excipients_core", "excipients_coating", "preservatives",
-    "colour", "shape", "size_mm", "weight", "ph",
+    "nonmedicinal_ingredients",
+    "color", "shape", "size_mm", "weight", "ph",
 )
 
 _SYNTH_FONT_PATHS = [
@@ -1379,7 +1353,7 @@ def select_sample(df: pd.DataFrame, n: int) -> list[str]:
         return all_dins
 
     strats: dict[str, list[str]] = defaultdict(list)
-    patent_cols = [c for c in df.columns if re.match(r"patent_\d+_number$", c)]
+    patent_cols = [c for c in df.columns if c == "patent_number"]
 
     for _, row in df.iterrows():
         din    = str(row.get("din", "")).strip()
@@ -1540,7 +1514,7 @@ def format_report(
 
     if not labeling_active:
         lines.append(
-            "- **Labeling fields (active_ingredient, excipients, pH, colour, shape, etc.):** "
+            "- **Labeling fields (active_ingredient, excipients, pH, color, shape, etc.):** "
             "UNVERIFIED — labeling stage was not run for this workbook."
         )
 

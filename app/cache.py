@@ -66,3 +66,11 @@ def cache_clear(source: Optional[str] = None) -> int:
         )
         _conn.commit()
     return cursor.rowcount
+
+
+def cache_clear_all() -> int:
+    """Delete every entry from the HTTP cache regardless of TTL."""
+    with _lock:
+        cursor = _conn.execute("DELETE FROM cache")
+        _conn.commit()
+    return cursor.rowcount

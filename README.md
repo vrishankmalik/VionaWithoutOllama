@@ -64,8 +64,8 @@ With `LLM_PROVIDER=none` (the default):
 - **DPD, NOC, GSUR, Patent Register searches** — fully deterministic, same accuracy
   as the Ollama version (these never used LLM for search).
 - **Excipients / preservatives** — regex extraction; accuracy ~90 % on common PM layouts.
-- **Appearance fields (colour, shape, size_mm, weight)** — regex extraction;
-  colour and shape are well-covered; size_mm and weight are present ~60–70 % of PMs.
+- **Appearance fields (color, shape, size_mm, weight)** — regex extraction;
+  color and shape are well-covered; size_mm and weight are present ~60–70 % of PMs.
 - **pH** — regex extraction; coverage ~80 % for liquid/solution PMs.
 - **Data-protection matching** — difflib fuzzy at cutoff 0.8; handles most manufacturer
   name variations without LLM. Ambiguous multi-row shortlists return `{}` (blank)

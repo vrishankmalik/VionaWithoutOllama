@@ -46,66 +46,68 @@ from app.models import DrugRecord, SearchResponse
 # DIN values that should be excluded from Sheet 1
 _EXCLUDED_DIN_VALUES = {"", "not applicable", "n/a", "na", "none"}
 
-# Supplement submission types to drop from Sheet 1 (SNDS / SANDS)
+# Supplement submission types to drop from Sheet 1 (SNDS / SANDS) — existing behavior preserved
 _SUPPLEMENT_TYPE_RE = re.compile(
     r"\bSNDS\b|\bSANDS\b|Supplement\s+to\s+(a\s+New|an\s+Abbreviated)",
     re.IGNORECASE,
 )
 
+# ANDS lineage detector — used to partition NDS history from ANDS entries.
+_ANDS_RE = re.compile(
+    r"\bANDS\b|Abbreviated\s+New\s+Drug\s+Submission",
+    re.IGNORECASE,
+)
+
+# Separator for multi-entry NOC history cells (newline is safe; API fields are single-line).
+_NOC_JOIN_SEP = "\n"
+
 # Sentinel dict for DPD DINs that have no matching NOC record
 _NO_NOC_RECORD = {
-    "noc_brand_name": "No NOC record",
-    "noc_company": "No NOC record",
     "noc_date": "No NOC record",
+    "reason_for_supplement": "No NOC record",
+    "submission_class": "No NOC record",
     "noc_submission_type": "No NOC record",
     "noc_therapeutic_class": "No NOC record",
 }
 
 _LABELING_FIELDS = (
-    "active_ingredient", "excipients_core", "excipients_coating",
-    "preservatives", "pack_size", "pack_style",
-    "colour", "shape", "size_mm", "weight", "ph",
+    "active_ingredient", "nonmedicinal_ingredients",
+    "pack_size", "pack_style",
+    "color", "shape", "size_mm", "weight", "ph",
 )
 
 # Columns that are NEVER pruned regardless of fill rate.
 _NEVER_DROP_COLS = frozenset({
     # Identity / provenance
-    "din", "_drug_code", "needs_ocr",
+    "ingredient_name", "din", "_drug_code",
     # DPD core
     "brand_name", "company", "ingredient", "strength",
     "dosage_form", "route", "status",
-    # Patent summary (patent_1_* is protected separately as the floor group)
-    "patent_count",
+    # Patent summary
+    "patent_count", "patent_number", "patent_grant_date", "patent_expiry_date",
     # NOC
-    "noc_brand_name", "noc_company", "noc_date",
+    "noc_date", "reason_for_supplement", "submission_class",
     "noc_submission_type", "noc_therapeutic_class",
     # Labeling
-    "active_ingredient", "excipients_core", "excipients_coating", "preservatives",
+    "active_ingredient", "nonmedicinal_ingredients",
     "pack_size", "pack_style",
-    "colour", "shape", "size_mm", "weight", "ph",
+    "color", "shape", "size_mm", "weight", "ph",
     # Data protection (always present even when no record matches)
     "dp_6yr_no_file_date", "pediatric_extension", "data_protection_ends",
 })
 
-# Canonical Sheet 1 column order.  Patent N_* columns are inserted between the
-# pre-patent and post-patent groups at assembly time (count varies per dataset).
-_SHEET1_PRE_PATENT_COLS = (
+# Canonical Sheet 1 column order — fixed, no dynamic patent groups.
+_SHEET1_COLS = (
+    "ingredient_name",
     "din", "ingredient", "brand_name", "company", "strength", "dosage_form",
-    "route", "status", "_drug_code", "_schedule", "_last_update",
-    "noc_brand_name", "noc_company", "noc_date",
+    "route", "status", "_drug_code", "_schedule",
+    "noc_date", "reason_for_supplement", "submission_class",
     "noc_submission_type", "noc_therapeutic_class",
-    "patent_count",
-)
-_SHEET1_POST_PATENT_COLS = (
-    "active_ingredient", "excipients_core", "excipients_coating", "preservatives",
-    "pack_size", "pack_style", "colour", "shape", "size_mm",
-    "weight", "ph", "needs_ocr",
+    "patent_count", "patent_number", "patent_grant_date", "patent_expiry_date",
+    "active_ingredient", "nonmedicinal_ingredients",
+    "pack_size", "pack_style", "color", "shape", "size_mm",
+    "weight", "ph",
     "dp_6yr_no_file_date", "pediatric_extension", "data_protection_ends",
-)
-
-# Regex to identify patent_N group columns (the four columns per patent slot).
-_PATENT_GROUP_RE = re.compile(
-    r"^patent_(\d+)_(number|filing_date|grant_date|expiry_date)$"
 )
 
 
@@ -134,12 +136,7 @@ def _prune_sparse_columns(
     df: pd.DataFrame,
     min_fill_rate: float = WORKBOOK_MIN_FILL_RATE,
 ) -> pd.DataFrame:
-    """Drop Sheet 1 columns whose non-empty fill rate is at or below min_fill_rate.
-
-    Patent groups (patent_N_number/filing/grant/expiry) are evaluated and
-    dropped together so the wide layout stays aligned.  The report is printed
-    to stdout so it appears in CLI and server logs.
-    """
+    """Drop Sheet 1 columns whose non-empty fill rate is at or below min_fill_rate."""
     if df.empty:
         return df
 
@@ -148,38 +145,8 @@ def _prune_sparse_columns(
     cols_to_drop: list[str] = []
     report_lines: list[str] = []
 
-    # ── Collect patent groups ────────────────────────────────────────────────
-    patent_groups: dict[int, list[str]] = {}
     for col in df.columns:
-        m = _PATENT_GROUP_RE.match(col)
-        if m:
-            patent_groups.setdefault(int(m.group(1)), []).append(col)
-    patent_all_cols: set[str] = {c for cols in patent_groups.values() for c in cols}
-
-    # Prune patent tail groups: walk from the HIGHEST group downward, dropping
-    # sparse groups until we reach a dense group (or hit the patent_1 floor).
-    # patent_1 is NEVER pruned by the threshold — it is the minimum patent slot
-    # and its dates represent real data for any DIN that has a patent.
-    if patent_groups:
-        for n in sorted(patent_groups, reverse=True):
-            if n == 1:
-                break  # patent_1 is the unconditional floor — stop here
-            num_col = f"patent_{n}_number"
-            if num_col not in df.columns:
-                continue
-            fr = _col_fill_rate(df[num_col], n_rows)
-            if fr <= min_fill_rate:
-                n_filled = round(fr * n_rows)
-                cols_to_drop.extend(patent_groups[n])
-                report_lines.append(
-                    f"  patent_{n} group (4 cols): {n_filled}/{n_rows} = {fr:.1%} fill → dropped"
-                )
-            else:
-                break  # Dense group found — keep this one and everything below it
-
-    # ── Non-patent columns ───────────────────────────────────────────────────
-    for col in df.columns:
-        if col in patent_all_cols or col in _NEVER_DROP_COLS:
+        if col in _NEVER_DROP_COLS:
             continue
         fr = _col_fill_rate(df[col], n_rows)
         if fr <= min_fill_rate:
@@ -208,6 +175,11 @@ def _is_excluded_din(din: Optional[str]) -> bool:
     return din is None or din.strip().lower() in _EXCLUDED_DIN_VALUES
 
 
+def _collect_noc_no_din_records(records: list[DrugRecord]) -> list[DrugRecord]:
+    """Return NOC records that carry no valid DIN (cannot produce a Sheet 1 row)."""
+    return [r for r in records if r.source == "NOC" and _is_excluded_din(r.din)]
+
+
 def _collect_dpd_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
     """Build DIN-keyed dict from DPD records. record_url excluded per Change 2."""
     out: dict[str, dict[str, Any]] = {}
@@ -226,7 +198,6 @@ def _collect_dpd_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
             "status": r.status,
             "_drug_code": r.source_specific.get("drug_code"),
             "_schedule": r.source_specific.get("schedule"),
-            "_last_update": r.source_specific.get("last_update_date"),
         }
     return out
 
@@ -234,10 +205,15 @@ def _collect_dpd_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
 def _collect_noc_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
     """Build DIN-keyed dict from NOC records.
 
-    Supplement rows (SNDS / SANDS) are dropped — only NDS, ANDS, and unknown
-    types are included.  noc_record_url excluded per Change 2.
+    SNDS/SANDS are dropped (existing behavior). Remaining entries are NDS or
+    ANDS. NDS entries are accumulated chronologically ascending and joined with
+    _NOC_JOIN_SEP so each cell holds the full NDS history. ANDS entries are
+    kept only when no NDS entry exists for a DIN (using the most-recent ANDS).
     """
-    out: dict[str, dict[str, Any]] = {}
+    # Accumulate per-DIN: separate NDS and ANDS entry lists.
+    nds_entries: dict[str, list[dict[str, Any]]] = {}
+    ands_entries: dict[str, dict[str, Any]] = {}
+
     for r in records:
         if r.source != "NOC" or _is_excluded_din(r.din):
             continue
@@ -245,53 +221,86 @@ def _collect_noc_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
         if _SUPPLEMENT_TYPE_RE.search(sub_type):
             continue  # drop SNDS / SANDS rows
         din = r.din.strip()  # type: ignore[union-attr]
-        out[din] = {
-            "noc_brand_name": r.brand_name,
-            "noc_company": r.company,
+        entry = {
             "noc_date": r.source_specific.get("noc_date"),
+            "reason_for_supplement": r.source_specific.get("reason_for_supplement"),
+            "submission_class": r.source_specific.get("submission_class"),
             "noc_submission_type": sub_type or None,
             "noc_therapeutic_class": r.source_specific.get("therapeutic_class"),
         }
+        if _ANDS_RE.search(sub_type):
+            # Keep only the most-recent ANDS (overwrite with later dates).
+            prev = ands_entries.get(din)
+            if prev is None or (entry["noc_date"] or "") >= (prev["noc_date"] or ""):
+                ands_entries[din] = entry
+        else:
+            nds_entries.setdefault(din, []).append(entry)
+
+    out: dict[str, dict[str, Any]] = {}
+
+    # NDS DINs — sort ascending by noc_date and join multi-entry fields.
+    for din, entries in nds_entries.items():
+        entries.sort(key=lambda e: e["noc_date"] or "")
+        def _join(field: str) -> Optional[str]:
+            vals = [str(e[field]) if e[field] is not None else "" for e in entries]
+            combined = _NOC_JOIN_SEP.join(v for v in vals if v)
+            return combined or None
+        out[din] = {
+            "noc_date": _join("noc_date"),
+            "reason_for_supplement": _join("reason_for_supplement"),
+            "submission_class": _join("submission_class"),
+            "noc_submission_type": _join("noc_submission_type"),
+            "noc_therapeutic_class": _join("noc_therapeutic_class"),
+        }
+
+    # ANDS-only DINs — use the single most-recent ANDS entry.
+    for din, entry in ands_entries.items():
+        if din not in out:
+            out[din] = entry
+
     return out
 
 
-def _aggregate_patents_wide(din: str, max_patents: int) -> dict[str, Any]:
-    """Return wide patent block: patent_count + max_patents column groups of 4.
+def _aggregate_patents_latest(din: str) -> dict[str, Any]:
+    """Return latest-expiry patent: patent_count + patent_number/grant_date/expiry_date.
 
-    Each group: patent_N_number, patent_N_filing_date, patent_N_grant_date,
-    patent_N_expiry_date.  Groups beyond the DIN's actual count are all None.
-    max_patents must be >= 1.
+    Selects the patent with the latest expiry_date; tiebreaker is highest
+    patent_number string.  Missing expiry_date cannot win (treated as min date).
     """
+    import datetime
     rows = get_patents_for_din(din)
     out: dict[str, Any] = {"patent_count": len(rows)}
-    for i in range(1, max_patents + 1):
-        if i <= len(rows):
-            r = rows[i - 1]
-            out[f"patent_{i}_number"] = r["patent_number"]
-            out[f"patent_{i}_filing_date"] = r.get("filing_date")
-            out[f"patent_{i}_grant_date"] = r.get("grant_date")
-            out[f"patent_{i}_expiry_date"] = r.get("expiry_date")
-        else:
-            out[f"patent_{i}_number"] = None
-            out[f"patent_{i}_filing_date"] = None
-            out[f"patent_{i}_grant_date"] = None
-            out[f"patent_{i}_expiry_date"] = None
+    if not rows:
+        out["patent_number"] = None
+        out["patent_grant_date"] = None
+        out["patent_expiry_date"] = None
+        return out
+
+    def _parse_date(s: Any) -> datetime.date:
+        if not s:
+            return datetime.date.min
+        try:
+            return datetime.date.fromisoformat(str(s)[:10])
+        except (ValueError, TypeError):
+            return datetime.date.min
+
+    best = max(rows, key=lambda r: (_parse_date(r.get("expiry_date")), r.get("patent_number") or ""))
+    out["patent_number"] = best.get("patent_number")
+    out["patent_grant_date"] = best.get("grant_date")
+    out["patent_expiry_date"] = best.get("expiry_date")
     return out
 
 
 def _get_labeling_cols(din: str) -> dict[str, Any]:
     """Return labeling fields for a DIN.
 
-    *_page citation columns and labeling_pdf_url are excluded per Change 2.
-    needs_ocr is kept as a live extraction-provenance flag.
+    *_page citation columns, labeling_pdf_url, and needs_ocr are excluded
+    from the workbook output per schema requirements.
     """
     row = get_labeling_for_din(din)
     out: dict[str, Any] = {}
     for field in _LABELING_FIELDS:
         out[field] = row.get(field) if row else None
-        # _page columns intentionally omitted from workbook output
-    out["needs_ocr"] = bool(row.get("needs_ocr")) if row else None
-    # labeling_pdf_url intentionally omitted from workbook output
     return out
 
 
@@ -337,38 +346,15 @@ def _col_is_all_empty(series: pd.Series) -> bool:
 def _drop_empty_sheet1_cols(df: pd.DataFrame) -> pd.DataFrame:
     """Drop all-empty columns from Sheet 1 before writing.
 
-    Patent groups (patent_N_number + 3 date cols) are evaluated and dropped as
-    a unit: only when ALL four columns in the group are all-empty for all rows.
-    This keeps layout aligned when some patents have numbers but missing dates.
-
-    All other columns are dropped individually when all-empty.
-
-    "Empty" means None/NaN/''/whitespace only.  Sentinels like
-    'No NOC record', 'No PM available', 'Not in PM' count as REAL data.
+    Protected columns (_NEVER_DROP_COLS) are always kept even when all-empty.
+    "Empty" means None/NaN/''/whitespace only; sentinels count as REAL data.
     """
     if df.empty:
         return df
 
     cols_to_drop: list[str] = []
-    patent_group_cols: set[str] = set()
-
-    # 1. Patent groups — drop only if the whole group is all-empty
-    pat_nums = sorted({
-        int(m.group(1))
-        for c in df.columns
-        if (m := re.match(r"^patent_(\d+)_", c))
-    })
-    for n in pat_nums:
-        grp = [c for c in df.columns if c.startswith(f"patent_{n}_")]
-        patent_group_cols.update(grp)
-        if all(_col_is_all_empty(df[c]) for c in grp):
-            cols_to_drop.extend(grp)
-
-    # 2. Non-patent columns — drop individually if all-empty.
-    # Protected schema columns (_NEVER_DROP_COLS) are always kept even when
-    # all-empty, because they are part of the declared output contract.
     for col in df.columns:
-        if col in patent_group_cols or col in _NEVER_DROP_COLS:
+        if col in _NEVER_DROP_COLS:
             continue
         if _col_is_all_empty(df[col]):
             cols_to_drop.append(col)
@@ -386,33 +372,50 @@ def _drop_empty_sheet1_cols(df: pd.DataFrame) -> pd.DataFrame:
 def build_sheet1(
     response: SearchResponse,
     dp_table: Optional[list[dict]] = None,
+    ingredient_name: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Build Sheet 1: one row per DIN, DPD + NOC + wide patents + labeling + data protection."""
+    """Build Sheet 1: one row per DIN, DPD + NOC + patents + labeling + data protection.
+
+    DIN universe is sourced exclusively from NOC. DPD data enriches those DINs
+    but never adds new DINs. DPD-only DINs are excluded; see build_exclusion_list().
+    """
     all_records = [r for s in response.sources for r in s.records]
 
     dpd_by_din = _collect_dpd_rows(all_records)
     noc_by_din = _collect_noc_rows(all_records)
 
-    all_dins = sorted(set(dpd_by_din) | set(noc_by_din))
-    if not all_dins:
-        return pd.DataFrame()
+    # Log NOC entries that have no attached DIN — they cannot produce a row.
+    for r in _collect_noc_no_din_records(all_records):
+        logger.warning(
+            "NOC entry has no DIN — excluded from sheet: brand=%s noc_date=%s",
+            r.brand_name, r.source_specific.get("noc_date"),
+        )
 
-    # Compute M = max patents across all DINs in this result set (at least 1)
-    max_patents = max(
-        (len(get_patents_for_din(din)) for din in all_dins),
-        default=0,
-    )
-    max_patents = max(max_patents, 1)
+    # NOC is the authoritative DIN universe; DPD-only DINs are dropped.
+    noc_dins = set(noc_by_din)
+    dpd_only = sorted(set(dpd_by_din) - noc_dins)
+    if dpd_only:
+        logger.info(
+            "Excluding %d DPD-only DIN(s) not in NOC for %r: %s",
+            len(dpd_only), response.metadata.query, dpd_only,
+        )
+
+    all_dins = sorted(noc_dins)
+    if not all_dins:
+        logger.warning(
+            "No NOC DINs found for %r — Sheet 1 will be empty. "
+            "NOC returned no entries with an attached DIN for this ingredient.",
+            response.metadata.query,
+        )
+        return pd.DataFrame()
 
     rows = []
     for din in all_dins:
         row: dict[str, Any] = {"din": din}
         row.update(dpd_by_din.get(din, {}))
-        # DPD products with no NOC record (or whose NOC submission was filtered out)
-        # receive explicit "No NOC record" labels so blanks are unambiguous.
         noc_data = noc_by_din.get(din)
         row.update(noc_data if noc_data is not None else _NO_NOC_RECORD)
-        row.update(_aggregate_patents_wide(din, max_patents))
+        row.update(_aggregate_patents_latest(din))
         row.update(_get_labeling_cols(din))
         dpd_rec = dpd_by_din.get(din, {})
         row.update(_get_dp_cols(dpd_rec.get("ingredient"), dpd_rec.get("company"), dp_table))
@@ -420,27 +423,49 @@ def build_sheet1(
 
     df = pd.DataFrame(rows)
 
-    # Apply the canonical column order defined by _SHEET1_PRE/POST_PATENT_COLS.
-    # Patent_N_* columns are dynamic (count varies), so they are inserted between
-    # the two fixed groups, sorted by patent slot number.
+    # Apply the canonical fixed column order; append any unexpected extras at end.
     present = set(df.columns)
-    patent_cols = sorted(
-        (c for c in present if _PATENT_GROUP_RE.match(c)),
-        key=lambda c: (int(_PATENT_GROUP_RE.match(c).group(1)),  # type: ignore[union-attr]
-                       ("number", "filing_date", "grant_date", "expiry_date").index(
-                           _PATENT_GROUP_RE.match(c).group(2))),  # type: ignore[union-attr]
-    )
-    ordered = (
-        [c for c in _SHEET1_PRE_PATENT_COLS if c in present]
-        + patent_cols
-        + [c for c in _SHEET1_POST_PATENT_COLS if c in present]
-    )
-    # Append any remaining columns not yet listed (future-proofing)
+    ordered = [c for c in _SHEET1_COLS if c in present]
     ordered += [c for c in df.columns if c not in set(ordered)]
 
     df = df[ordered].sort_values("din", kind="stable").reset_index(drop=True)
+    # ingredient_name column is in _SHEET1_COLS at position 0; populate it here.
+    df["ingredient_name"] = ingredient_name or response.metadata.query
+    # Re-apply ordering so ingredient_name stays first after the assignment.
+    ordered2 = [c for c in _SHEET1_COLS if c in set(df.columns)]
+    ordered2 += [c for c in df.columns if c not in set(ordered2)]
+    df = df[ordered2]
     df = _drop_empty_sheet1_cols(df)
     return _prune_sparse_columns(df)
+
+
+def build_exclusion_list(
+    response: SearchResponse,
+    ingredient_name: Optional[str] = None,
+) -> pd.DataFrame:
+    """Return a DataFrame of DPD DINs excluded because they are not in NOC.
+
+    Columns: din, brand_name, company, ingredient, reason.
+    This is the sidecar companion to build_sheet1 — every DIN that DPD returned
+    but that is absent from NOC appears here with an explanation.
+    """
+    all_records = [r for s in response.sources for r in s.records]
+    dpd_by_din = _collect_dpd_rows(all_records)
+    noc_by_din = _collect_noc_rows(all_records)
+
+    query = ingredient_name or response.metadata.query
+    excluded_dins = sorted(set(dpd_by_din) - set(noc_by_din))
+    rows = [
+        {
+            "din": din,
+            "brand_name": dpd_by_din[din].get("brand_name"),
+            "company": dpd_by_din[din].get("company"),
+            "ingredient": dpd_by_din[din].get("ingredient"),
+            "reason": f"not present in NOC for {query}",
+        }
+        for din in excluded_dins
+    ]
+    return pd.DataFrame(rows, columns=["din", "brand_name", "company", "ingredient", "reason"])
 
 
 # ── Sheet 2 helpers ───────────────────────────────────────────────────────────
@@ -454,7 +479,10 @@ def _ingredient_matches(record_ingredient: Optional[str], query: str) -> bool:
     return q in ing
 
 
-def build_sheet2(response: SearchResponse) -> pd.DataFrame:
+def build_sheet2(
+    response: SearchResponse,
+    ingredient_name: Optional[str] = None,
+) -> pd.DataFrame:
     """Build Sheet 2: Generic Submissions filtered to the queried ingredient."""
     query = response.metadata.query
     rows = []
@@ -472,12 +500,15 @@ def build_sheet2(response: SearchResponse) -> pd.DataFrame:
                 "status": r.status,
             })
 
+    label = ingredient_name or query
     if not rows:
         return pd.DataFrame(
-            columns=["medicinal_ingredient", "company", "therapeutic_area",
-                     "year_month_accepted", "status"]
+            columns=["ingredient_name", "medicinal_ingredient", "company",
+                     "therapeutic_area", "year_month_accepted", "status"]
         )
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df.insert(0, "ingredient_name", label)
+    return df
 
 
 # ── Workbook assembly ─────────────────────────────────────────────────────────
@@ -584,10 +615,7 @@ _BLOCK_COLORS: list[str] = [
     "C5EAEA",  # seafoam teal
 ]
 
-# Spacer columns written between adjacent product blocks
-_BLOCK_SPACER = 1
-
-# Medium tints of Zydus purple/teal for banner rows (black text on these)
+# Medium tints of Zydus purple/teal for banner rows (kept for potential future use)
 _BLOCK_BANNER_COLORS: list[str] = [
     "D4A8D0",  # medium purple   (#AA55A0 ~50%)
     "80CECE",  # medium teal     (#00A5A5 ~50%)
@@ -627,51 +655,40 @@ def _safe_cell_val(val: Any) -> Any:
     return val
 
 
-def _write_multiblock_sheet(
+def _write_vertical_sheet(
     ws: Any,
-    blocks: list[tuple[str, pd.DataFrame]],
-    colors: list[str],
-    banner_colors: list[str],
-    spacer_cols: int = _BLOCK_SPACER,
+    df: pd.DataFrame,
+    ingredient_palette: list[tuple[str, str]],
 ) -> None:
-    """Write N product DataFrames side-by-side on one openpyxl worksheet.
+    """Write a vertically-stacked multi-ingredient sheet.
 
     Layout:
-      Row 1  — KEY LEGEND: "PRODUCT KEY:" label + one colored cell per product.
-      Row 2  — BANNER: merged-cell product name, colored, across each block.
-      Row 3  — HEADERS: column names for each block (standard gray fill).
-      Row 4+ — DATA: per-DIN rows, top-aligned (ragged heights are expected).
+      Row 1  — KEY LEGEND: "PRODUCT KEY:" + one colored cell per ingredient.
+      Row 2  — HEADERS: shared column names (purple fill, white text).
+      Row 3+ — DATA: rows sorted by ingredient order then DIN, color-coded by
+                     ingredient.  Even rows within each ingredient block get the
+                     block fill; odd rows get white (zebra stripe).
 
-    freeze_panes is set to "A4" so the key, banner, and header rows stay
-    visible when scrolling down.  No column freeze is applied since
-    side-by-side blocks require horizontal scrolling.
-
-    Autofilter is placed on the first block's header row (openpyxl supports
-    only one autofilter per sheet).
-
-    Between blocks, `spacer_cols` empty columns act as visual separators.
+    ingredient_palette: list of (name, block_hex_color) in display order.
+    freeze_panes="A3" keeps the key legend and headers visible while scrolling.
     """
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
+    import math as _math
 
-    from openpyxl.styles import Border, Side
+    KEY_ROW    = 1
+    HEADER_ROW = 2
+    DATA_START = 3
 
-    KEY_ROW = 1
-    BANNER_ROW = 2
-    HEADER_ROW = 3
-    DATA_START = 4
-
-    # ── Style constants ────────────────────────────────────────────────────────
-    HEADER_FILL  = PatternFill(start_color="3D226E", end_color="3D226E", fill_type="solid")
+    HEADER_FILL    = PatternFill(start_color="3D226E", end_color="3D226E", fill_type="solid")
     KEY_LABEL_FILL = PatternFill(start_color="3D226E", end_color="3D226E", fill_type="solid")
-    WHITE_FILL   = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    WHITE_FILL     = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
 
     _thin = Side(style="thin", color="D1D1D1")
     _med  = Side(style="medium", color="A0A0A0")
     CELL_BORDER   = Border(left=_thin, right=_thin, top=_thin, bottom=_thin)
     HEADER_BORDER = Border(left=_thin, right=_thin, top=_med,  bottom=_med)
 
-    # Status → font color (dark readable shades)
     _STATUS_COLOR = {
         "marketed":  "1A6B3C",
         "approved":  "1A6B3C",
@@ -679,31 +696,29 @@ def _write_multiblock_sheet(
         "dormant":   "7A4F00",
         "inactive":  "7A4F00",
     }
-
-    # Minimum column widths for well-known short fields
     _MIN_WIDTHS = {
         "din": 12, "status": 13, "form": 13, "route": 13,
         "strength": 14, "noc_date": 13, "patent_count": 10,
+        "ingredient_name": 18,
     }
 
-    # ── Compute column ranges for each block ──────────────────────────────────
-    block_col_ranges: list[tuple[int, int]] = []
-    col_cursor = 1
-    for _, df in blocks:
-        n_cols = len(df.columns) if not df.empty and len(df.columns) > 0 else 1
-        block_col_ranges.append((col_cursor, col_cursor + n_cols - 1))
-        col_cursor += n_cols + spacer_cols
+    # Build ingredient → block fill map
+    color_map: dict[str, PatternFill] = {
+        name: PatternFill(start_color=color, end_color=color, fill_type="solid")
+        for name, color in ingredient_palette
+    }
+
+    n_cols = len(df.columns) if not df.empty else 0
 
     # ── Row 1: Key legend ─────────────────────────────────────────────────────
     label_cell = ws.cell(row=KEY_ROW, column=1)
-    label_cell.value = "PRODUCT KEY:"
+    label_cell.value = "INGREDIENT KEY:"
     label_cell.font = Font(bold=True, name="Calibri", size=10, color="FFFFFF")
     label_cell.fill = KEY_LABEL_FILL
     label_cell.alignment = Alignment(horizontal="left", vertical="center")
     label_cell.border = CELL_BORDER
-    ws.column_dimensions["A"].width = 15
 
-    for i, ((name, _df), color) in enumerate(zip(blocks, colors)):
+    for i, (name, color) in enumerate(ingredient_palette):
         key_col = 2 + i
         cell = ws.cell(row=KEY_ROW, column=key_col)
         cell.value = name
@@ -715,93 +730,74 @@ def _write_multiblock_sheet(
 
     ws.row_dimensions[KEY_ROW].height = 22
 
-    # ── Row 2: Banners ────────────────────────────────────────────────────────
-    for (name, df), bcolor, (c_start, c_end) in zip(blocks, banner_colors, block_col_ranges):
-        n_dins = len(df) if not df.empty else 0
-        banner_text = f"{name.upper()}  —  {n_dins} DIN{'s' if n_dins != 1 else ''}"
-        cell = ws.cell(row=BANNER_ROW, column=c_start)
-        cell.value = banner_text
-        cell.fill = PatternFill(start_color=bcolor, end_color=bcolor, fill_type="solid")
-        cell.font = Font(bold=True, name="Calibri", size=12)
+    # ── Row 2: Column headers ─────────────────────────────────────────────────
+    cols = list(df.columns) if not df.empty else []
+    for j, col_name in enumerate(cols, 1):
+        cell = ws.cell(row=HEADER_ROW, column=j)
+        cell.value = col_name.replace("_", " ").title()
+        cell.font = Font(bold=True, name="Calibri", size=10, color="FFFFFF")
+        cell.fill = HEADER_FILL
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=False)
-        cell.border = Border(left=_med, right=_med, top=_med, bottom=_med)
-        if c_end > c_start:
-            ws.merge_cells(
-                start_row=BANNER_ROW, start_column=c_start,
-                end_row=BANNER_ROW, end_column=c_end,
-            )
-    ws.row_dimensions[BANNER_ROW].height = 30
-
-    # ── Row 3: Column headers ─────────────────────────────────────────────────
-    for (name, df), (c_start, _c_end) in zip(blocks, block_col_ranges):
-        cols = list(df.columns) if not df.empty else []
-        for j, col_name in enumerate(cols):
-            cell = ws.cell(row=HEADER_ROW, column=c_start + j)
-            cell.value = col_name.replace("_", " ").title()
-            cell.font = Font(bold=True, name="Calibri", size=10, color="FFFFFF")
-            cell.fill = HEADER_FILL
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=False)
-            cell.border = HEADER_BORDER
+        cell.border = HEADER_BORDER
     ws.row_dimensions[HEADER_ROW].height = 26
 
-    # ── Column widths (computed first — needed for row-height estimation) ─────
-    # col_widths_map: excel_col_index → width in chars
-    col_widths_map: dict[int, float] = {}
-    for (name, df), (c_start, _c_end) in zip(blocks, block_col_ranges):
-        for j, col_name in enumerate(df.columns if not df.empty else []):
-            max_val_len = (
-                df[col_name].fillna("").astype(str).str.len().max()
-                if not df.empty else 0
-            )
-            floor = _MIN_WIDTHS.get(col_name.lower(), 0)
-            width = min(max(len(str(col_name)) + 4, int(max_val_len or 0) + 3, floor), 42)
-            col_widths_map[c_start + j] = width
-            ws.column_dimensions[get_column_letter(c_start + j)].width = width
+    if not df.empty:
+        last_col = get_column_letter(n_cols)
+        ws.auto_filter.ref = f"A{HEADER_ROW}:{last_col}{HEADER_ROW}"
 
-    # ── Rows 4+: Data (wrap_text on, row heights auto-sized) ─────────────────
-    import math as _math
-    LINE_HEIGHT_PT = 15.0  # Calibri 10pt ≈ 15pt per line
-
-    for (name, df), color, (c_start, _c_end) in zip(blocks, colors, block_col_ranges):
-        if df.empty:
-            continue
-        row_fill_a = PatternFill(start_color=color, end_color=color, fill_type="solid")
-        for r_idx, (_idx, row_series) in enumerate(df.iterrows()):
-            excel_row = DATA_START + r_idx
-            row_fill = row_fill_a if r_idx % 2 == 0 else WHITE_FILL
-            max_lines = 1
-            for j, col_name in enumerate(df.columns):
-                val = _safe_cell_val(row_series[col_name])
-                cell = ws.cell(row=excel_row, column=c_start + j)
-                cell.value = val
-                cell.fill = row_fill
-                cell.border = CELL_BORDER
-                cell.alignment = Alignment(vertical="top", wrap_text=True)
-                status_key = str(val).lower().strip() if val is not None else ""
-                if col_name == "status" and status_key in _STATUS_COLOR:
-                    cell.font = Font(
-                        bold=True, name="Calibri", size=10,
-                        color=_STATUS_COLOR[status_key],
-                    )
-                else:
-                    cell.font = Font(name="Calibri", size=10)
-                # Estimate lines this cell needs given the column width
-                col_w = col_widths_map.get(c_start + j, 20)
-                text_len = len(str(val)) if val is not None else 0
-                lines = _math.ceil(text_len / max(col_w, 1)) if text_len else 1
-                max_lines = max(max_lines, lines)
-            ws.row_dimensions[excel_row].height = max(LINE_HEIGHT_PT, max_lines * LINE_HEIGHT_PT)
-
-    # ── Freeze top 3 rows (key + banner + header) ─────────────────────────────
-    ws.freeze_panes = "A4"
-
-    # ── Autofilter on the first block's header row ─────────────────────────────
-    if block_col_ranges and blocks and not blocks[0][1].empty:
-        c_start, c_end = block_col_ranges[0]
-        ws.auto_filter.ref = (
-            f"{get_column_letter(c_start)}{HEADER_ROW}:"
-            f"{get_column_letter(c_end)}{HEADER_ROW}"
+    # ── Column widths ─────────────────────────────────────────────────────────
+    col_widths: list[float] = []
+    for j, col_name in enumerate(cols, 1):
+        max_val_len = (
+            df[col_name].fillna("").astype(str).str.len().max()
+            if not df.empty else 0
         )
+        floor = _MIN_WIDTHS.get(col_name.lower(), 0)
+        width = min(max(len(str(col_name)) + 4, int(max_val_len or 0) + 3, floor), 42)
+        col_widths.append(width)
+        ws.column_dimensions[get_column_letter(j)].width = width
+
+    # ── Rows 3+: Data ─────────────────────────────────────────────────────────
+    # Track per-ingredient row counter for zebra striping within each block.
+    ing_row_counter: dict[str, int] = {}
+
+    LINE_HEIGHT_PT = 15.0
+
+    for r_idx, (_idx, row_series) in enumerate(df.iterrows()):
+        ing = str(row_series.get("ingredient_name", "")) if "ingredient_name" in df.columns else ""
+        ing_row_counter[ing] = ing_row_counter.get(ing, 0)
+        row_fill = (
+            color_map.get(ing, WHITE_FILL)
+            if ing_row_counter[ing] % 2 == 0
+            else WHITE_FILL
+        )
+        ing_row_counter[ing] += 1
+
+        excel_row = DATA_START + r_idx
+        max_lines = 1
+
+        for j, col_name in enumerate(cols):
+            val = _safe_cell_val(row_series[col_name])
+            cell = ws.cell(row=excel_row, column=j + 1)
+            cell.value = val
+            cell.fill = row_fill
+            cell.border = CELL_BORDER
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            status_key = str(val).lower().strip() if val is not None else ""
+            if col_name == "status" and status_key in _STATUS_COLOR:
+                cell.font = Font(bold=True, name="Calibri", size=10,
+                                 color=_STATUS_COLOR[status_key])
+            else:
+                cell.font = Font(name="Calibri", size=10)
+            text_len = len(str(val)) if val is not None else 0
+            col_w = col_widths[j] if j < len(col_widths) else 20
+            lines = _math.ceil(text_len / max(col_w, 1)) if text_len else 1
+            max_lines = max(max_lines, lines)
+
+        ws.row_dimensions[excel_row].height = max(LINE_HEIGHT_PT, max_lines * LINE_HEIGHT_PT)
+
+    # ── Freeze key legend + header rows ──────────────────────────────────────
+    ws.freeze_panes = "A3"
 
 
 def build_workbook_multiproduct(
@@ -809,68 +805,71 @@ def build_workbook_multiproduct(
     source_errors: Optional[dict[str, Optional[str]]] = None,
     dp_table: Optional[list[dict]] = None,
 ) -> "tuple[bytes, pd.DataFrame, pd.DataFrame]":
-    """Build a side-by-side multi-product two-tab workbook.
+    """Build a vertically-stacked multi-ingredient two-tab workbook.
 
-    Each product in ``products`` becomes one color-coded horizontal block on
-    both Tab 1 ("DPD + NOC + Patents") and Tab 2 ("Generic Submissions").  The
-    same color is used on both tabs so a product is visually consistent.
+    Each product becomes one color-coded vertical block in the shared column
+    layout on both tabs.  Rows for different ingredients are distinguished by
+    their row fill color; the ``ingredient_name`` column (always first) makes
+    the ingredient explicit in every row.
 
-    Single-product is a degenerate case (one block, no spacer) and produces
-    the same underlying data as ``build_workbook``.
+    Single-product is a degenerate case (one block) and produces the same
+    underlying data as ``build_workbook``.
 
     Returns (xlsx_bytes, combined_sheet1_df, combined_sheet2_df).
-    The combined DataFrames have a ``product`` column prepended (used by the
-    dashboard JSON view) and are a flat concatenation of all product blocks.
     """
     import openpyxl
 
     colors = [_block_color(i) for i in range(len(products))]
-    banner_colors = [_block_banner_color(i) for i in range(len(products))]
 
-    # ── Build per-product DataFrames ──────────────────────────────────────────
-    sheet1_blocks: list[tuple[str, pd.DataFrame]] = []
-    sheet2_blocks: list[tuple[str, pd.DataFrame]] = []
-    for name, response in products:
-        s1 = build_sheet1(response, dp_table=dp_table)
-        s2 = build_sheet2(response)
-        sheet1_blocks.append((name, s1))
-        sheet2_blocks.append((name, s2))
+    # ── Build per-product DataFrames (ingredient_name already inserted) ───────
+    sheet1_frames: list[pd.DataFrame] = []
+    sheet2_frames: list[pd.DataFrame] = []
+    for (name, response), _color in zip(products, colors):
+        s1 = build_sheet1(response, dp_table=dp_table, ingredient_name=name)
+        s2 = build_sheet2(response, ingredient_name=name)
+        sheet1_frames.append(s1)
+        sheet2_frames.append(s2)
 
-    # ── Assemble XLSX via openpyxl directly (not pandas ExcelWriter) ──────────
+    # ── Vertically concatenate; pd.concat aligns columns by name ─────────────
+    def _vstack(frames: list[pd.DataFrame]) -> pd.DataFrame:
+        non_empty = [f for f in frames if not f.empty]
+        if not non_empty:
+            return pd.DataFrame()
+        return pd.concat(non_empty, ignore_index=True, sort=False)
+
+    combined_s1 = _vstack(sheet1_frames)
+    combined_s2 = _vstack(sheet2_frames)
+
+    # Restore canonical column order after concat (columns may shift)
+    def _reorder(df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            return df
+        present = set(df.columns)
+        ordered = [c for c in _SHEET1_COLS if c in present]
+        ordered += [c for c in df.columns if c not in set(_SHEET1_COLS)]
+        return df[ordered]
+
+    combined_s1 = _reorder(combined_s1)
+
+    # ── Ingredient palette (name → color) for the sheet writer ───────────────
+    ingredient_palette = [(name, colors[i]) for i, (name, _) in enumerate(products)]
+
+    # ── Assemble XLSX ─────────────────────────────────────────────────────────
     buf = io.BytesIO()
     wb = openpyxl.Workbook()
 
     ws1 = wb.active
     ws1.title = "DPD + NOC + Patents"
-    _write_multiblock_sheet(ws1, sheet1_blocks, colors, banner_colors)
+    _write_vertical_sheet(ws1, combined_s1, ingredient_palette)
 
     ws2 = wb.create_sheet(title="Generic Submissions")
-    _write_multiblock_sheet(ws2, sheet2_blocks, colors, banner_colors)
+    _write_vertical_sheet(ws2, combined_s2, ingredient_palette)
 
     if source_errors is not None:
         _build_status_sheet_multi(wb, products, source_errors)
 
     wb.save(buf)
-    xlsx_bytes = buf.getvalue()
-
-    # ── Build combined flat DataFrames for the dashboard (JSON snapshot) ──────
-    def _concat_with_product_col(
-        named_dfs: list[tuple[str, pd.DataFrame]],
-    ) -> pd.DataFrame:
-        frames = []
-        for name, df in named_dfs:
-            if not df.empty:
-                dfc = df.copy()
-                dfc.insert(0, "product", name)
-                frames.append(dfc)
-        if not frames:
-            return pd.DataFrame()
-        return pd.concat(frames, ignore_index=True, sort=False)
-
-    combined_s1 = _concat_with_product_col(sheet1_blocks)
-    combined_s2 = _concat_with_product_col(sheet2_blocks)
-
-    return xlsx_bytes, combined_s1, combined_s2
+    return buf.getvalue(), combined_s1, combined_s2
 
 
 def _build_status_sheet_multi(
