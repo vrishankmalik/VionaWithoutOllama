@@ -11,7 +11,7 @@ Stage 2 (this file, top half): DPD API + info page
 Stage 3 (this file, bottom half): PDF extraction
   Fields extracted ONLY from the PDF:
     excipients_core, excipients_coating, preservatives,
-    ph, colour, shape, size_mm, weight
+    ph, color, shape, size_mm, weight
   Per-strength matching: use the DIN's strength to scope §6 Description block.
   Section location by keyword → only that section passed to Ollama or regex.
   Regex extraction is the active path by default (NullProvider). A configured
@@ -112,9 +112,9 @@ PH_SOLUBILITY_ONLY = "Not stated (pH-dependent solubility only)"
 _MIN_TEXT_CHARS = 50
 
 _LABELING_FIELDS = (
-    "active_ingredient", "excipients_core", "excipients_coating",
-    "preservatives", "pack_size", "pack_style",
-    "colour", "shape", "size_mm", "weight", "ph",
+    "active_ingredient", "nonmedicinal_ingredients",
+    "pack_size", "pack_style",
+    "color", "shape", "size_mm", "weight", "ph",
 )
 
 # Fields sourced from DPD API (Stage 2) — never extracted from PDF
@@ -177,27 +177,24 @@ def _extract_pack_style_from_text(text: str, source_label: str = "") -> Optional
 def _extract_pack_size_from_product_info(prod_info: str) -> Optional[str]:
     """Parse product_information free-text into a clean pack_size string.
 
-    Container-type keywords are stripped before size parsing so they cannot
-    bleed into the result.
+    When multiple container types appear with different counts, produces a
+    descriptive "N-count container" entry for each so the result is unambiguous.
 
     Examples:
-      "FOR I.V. INFUSION ONLY. 80MG/ML(RECONST.) - 5ML VIAL." → "5 mL"
-      "24/50/100/200"                                           → "24, 50, 100, 200 count"
-      "100/500"                                                 → "100, 500 count"
-      "100 TABLETS"                                             → "100 count"
-      "5ML"                                                     → "5 mL"
+      "FOR I.V. INFUSION ONLY. 80MG/ML(RECONST.) - 5ML VIAL."   → "5 mL"
+      "24/50/100/200"                                             → "24, 50, 100, 200 count"
+      "100/500"                                                   → "100, 500 count"
+      "100 TABLETS"                                               → "100 count"
+      "5ML"                                                       → "5 mL"
+      "8 COUNT BLISTERS AND BOTTLES OF 120 CAPSULES"             → "8-count blister; 120-count bottle"
+      "8 COUNT BLISTERS"                                          → "8 count"
     """
-    # Strip container keywords
-    text = prod_info.upper()
-    for pattern, _ in _CONTAINER_PATTERNS:
-        text = pattern.sub(" ", text)
-    text = text.strip()
+    text_upper = prod_info.upper()
 
     # Volume: standalone N mL / N L — NOT a concentration like 80MG/ML
-    # The negative lookahead rejects things like "80MG/ML"
     vol_m = re.search(
         r'(?:^|[\s\-\.,(])(\d+(?:\.\d+)?)\s*(ML|L)\b(?!\s*/)',
-        text,
+        text_upper,
     )
     if vol_m:
         num = float(vol_m.group(1))
@@ -205,16 +202,61 @@ def _extract_pack_size_from_product_info(prod_info: str) -> Optional[str]:
         return f"{num:g} {unit}"
 
     # Slash-separated pure-integer counts: "24/50/100/200" or "100/500"
-    slash_m = re.search(r'\b(\d+(?:/\d+)+)\b', text)
+    slash_m = re.search(r'\b(\d+(?:/\d+)+)\b', text_upper)
     if slash_m:
         parts = slash_m.group(1).split("/")
         if all(p.isdigit() for p in parts):
             return ", ".join(parts) + " count"
 
-    # Explicit count with tablet/capsule/unit word
-    count_m = re.search(r'\b(\d+)\s+(?:TABLETS?|CAPSULES?|CAPS?|UNITS?)\b', text)
-    if count_m:
-        return f"{count_m.group(1)} count"
+    # Try to find (count, container) pairs so the result is self-describing.
+    # Two sub-patterns tried per container keyword (longest-match-first order):
+    #   Forward:  "N COUNT/CAPSULES/TABLETS CONTAINER" → e.g. "8 count blisters"
+    #   Reverse:  "CONTAINER OF N [CAPSULES/TABLETS]?" → e.g. "bottles of 120 capsules"
+    pairs: list[tuple[int, str]] = []
+    seen_labels: set[str] = set()
+
+    for kw, label in _CONTAINER_VOCAB_ORDERED:
+        kw_pat = re.escape(kw) + r"S?"  # allow plural
+
+        fwd = re.search(
+            r'\b(\d+)\s+(?:COUNT|TABLETS?|CAPSULES?|CAPS?|UNITS?)\s+' + kw_pat + r'\b',
+            text_upper,
+        )
+        if fwd and label not in seen_labels:
+            pairs.append((int(fwd.group(1)), label))
+            seen_labels.add(label)
+            continue
+
+        rev = re.search(
+            kw_pat + r'\s+OF\s+(\d+)(?:\s+(?:TABLETS?|CAPSULES?|CAPS?|UNITS?))?\b',
+            text_upper,
+        )
+        if rev and label not in seen_labels:
+            pairs.append((int(rev.group(1)), label))
+            seen_labels.add(label)
+
+    if pairs:
+        if len(pairs) == 1:
+            # Single container — count alone is enough; pack_style carries the container name.
+            return f"{pairs[0][0]} count"
+        # Multiple containers — name each for clarity.
+        return "; ".join(f"{n}-count {lbl.lower()}" for n, lbl in pairs)
+
+    # Fallback: strip container words and pick up any count/unit expressions.
+    text = text_upper
+    for pattern, _ in _CONTAINER_PATTERNS:
+        text = pattern.sub(" ", text)
+    text = text.strip()
+
+    count_matches = re.findall(
+        r'\b(\d+)\s+(?:TABLETS?|CAPSULES?|CAPS?|UNITS?|COUNT)\b',
+        text,
+    )
+    of_matches = re.findall(r'\bOF\s+(\d+)\b', text)
+
+    all_found = list(dict.fromkeys(count_matches + of_matches))
+    if all_found:
+        return "; ".join(f"{m} count" for m in all_found)
 
     return None
 
@@ -555,6 +597,17 @@ def _extract_text_with_ocr(
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for i, page in enumerate(pdf.pages, start=1):
             raw_text = page.extract_text() or ""
+            # For pages where NM ingredients appear as a table column, pdfplumber's
+            # text extraction interleaves columns and produces garbage.  Replace the
+            # bare column-header occurrence in-place with the inline form so it lands
+            # cleanly inside the §6 section text.
+            nm_from_table = _extract_nm_from_table_column(page)
+            if nm_from_table:
+                raw_text = _NM_HEADING_RE.sub(
+                    f"Non-Medicinal Ingredients: {nm_from_table}",
+                    raw_text,
+                    count=1,
+                )
             used_ocr = False
 
             if len(raw_text) < _MIN_TEXT_CHARS and enable_ocr:
@@ -740,7 +793,7 @@ def _apply_provider_result(
 
 # ── Stage 3: regex fallback ───────────────────────────────────────────────────
 
-_COLOUR_WORDS = (
+_COLOR_WORDS = (
     r"(?:light |pale |dark |bright |deep |off-?)?(?:white|red|pink|orange|yellow|green|"
     r"blue|purple|violet|brown|beige|grey|gray|black|cream|tan|teal|maroon|ivory)"
 )
@@ -840,25 +893,20 @@ _PACK_STYLE_HEADING_REJECT = re.compile(
 _TRAILING_COLON_RE = re.compile(r":\s*$", re.MULTILINE)
 
 
-def _extract_pack_style_from_pdf(s6_text: str) -> Optional[str]:
-    """Extract a container-type label from the §6 Packaging subsection.
+def _extract_packaging_from_pdf(s6_text: str) -> tuple[Optional[str], Optional[str]]:
+    """Extract (pack_size, pack_style) from the §6 Packaging subsection.
 
-    Returns a Title-Case container label (e.g. "Bottle", "Vial") or None.
-    Raw captured text is never returned — only the normalised container label.
-    Stage 2 (DPD API) overrides this value in enrich_labeling.
+    Both values come from the same raw text block so they are always consistent.
+    Stage 2 (DPD API) overrides both in enrich_labeling when it has data.
 
-    Reject rules (applied before returning):
-      (a) any captured block containing "the following", "dosage strengths",
-          or "dosage form" is a heading fragment — skip.
-      (b) any captured block where any line ends with ":" is a heading fragment — skip.
-      (c) the block must contain at least one container-vocabulary keyword.
+    Reject rules for the captured block:
+      (a) contains "the following", "dosage strengths", or "dosage form" → heading fragment, skip.
+      (b) any line ends with ":" → heading fragment, skip.
+      (c) must contain at least one container-vocabulary keyword.
     """
     pats = [
-        # "Packaging" on its own line, followed by content
         r"(?m)^Packaging\s*$\n(.+?)(?=\n\n|\n[A-Z\d]|\Z)",
-        # "Packaging:" as a label
         r"(?m)^Packaging\s*:\s*(.+?)(?=\n\n|\n[A-Z\d]|\Z)",
-        # "provided/available in ..." sentence
         r"(?:provided|available)\s+in\s+(.+?)(?:\.|;|\n|$)",
     ]
     for pat in pats:
@@ -868,18 +916,22 @@ def _extract_pack_style_from_pdf(s6_text: str) -> Optional[str]:
         val = m.group(1).strip()
         if len(val) <= 5:
             continue
-        # Hard reject: heading/dosage fragments
         if _PACK_STYLE_HEADING_REJECT.search(val):
             continue
-        # Hard reject: any line ending with ":" (section headings bleed in)
         if _TRAILING_COLON_RE.search(val):
             continue
-        # Require a container keyword — return the normalised label, never raw text
         label = _extract_pack_style_from_text(val)
         if not label:
             continue
-        return label
-    return None
+        pack_size = _extract_pack_size_from_product_info(val)
+        return pack_size, label
+    return None, None
+
+
+def _extract_pack_style_from_pdf(s6_text: str) -> Optional[str]:
+    """Thin wrapper kept for backward compatibility with tests."""
+    _, style = _extract_packaging_from_pdf(s6_text)
+    return style
 
 
 _KNOWN_PRESERVATIVES_RE = re.compile(
@@ -889,7 +941,29 @@ _KNOWN_PRESERVATIVES_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Patterns that locate a non-medicinal ingredient list in §6 text
+# ── Non-medicinal ingredients verbatim extraction ─────────────────────────────
+# Flexible heading match: "Non-medicinal Ingredients", "Nonmedicinal Ingredients",
+# "Clinically Relevant Non-medicinal Ingredients", "Nonmedical Ingredients".
+_NM_HEADING_RE = re.compile(
+    r"(?:Clinically\s+Relevant\s+)?"
+    r"Non[-\s]?medicinal\s+Ingredients?"
+    r"|Nonmedical\s+Ingredients?",
+    re.IGNORECASE,
+)
+
+# Lines signalling end of nonmedicinal block (Coating/Film Coat are NOT end markers —
+# they are sub-headers within the list).
+_NM_END_RE = re.compile(
+    r"^(?:"
+    r"Packaging|Storage|Shelf\s+Life|Description\b|"
+    r"Administration\b|Route\b|"
+    r"\d+\s+(?:DOSAGE|PHARMACEUTICAL|CLINICAL|NON-CLINICAL|WARNINGS|ADVERSE)"
+    r")",
+    re.IGNORECASE,
+)
+
+# Patterns that locate a non-medicinal ingredient list in §6 text (legacy, kept for
+# classify_preservatives which is still used internally)
 _NM_INGREDIENT_LIST_RE = re.compile(
     r"(?:Non-?[Mm]edicinal|[Ii]nactive|[Ee]xcipient)\s*(?:[Ii]ngredients?|[Ee]xcipients?)?"
     r"\s*[:\-]?\s*"
@@ -926,6 +1000,79 @@ def _classify_preservatives(s6_text: str) -> str:
     return "N"
 
 
+def _extract_nm_from_table_column(page: Any) -> Optional[str]:
+    """Extract Non-medicinal Ingredients from a pdfplumber table column layout.
+
+    Some Canadian PMs present §6 as a multi-column table:
+      | Route | Dosage Form / Strength | Non-medicinal Ingredients |
+    pdfplumber's extract_text() interleaves columns, producing garbage.
+    This function finds the NM column and returns clean cell content.
+    Returns None if no NM column is found.
+    """
+    try:
+        tables = page.extract_tables()
+        for table in tables:
+            if not table or len(table) < 2:
+                continue
+            header_row = table[0]
+            for col_idx, header_cell in enumerate(header_row):
+                if header_cell and _NM_HEADING_RE.search(str(header_cell)):
+                    parts: list[str] = []
+                    for data_row in table[1:]:
+                        if col_idx < len(data_row) and data_row[col_idx]:
+                            cell = str(data_row[col_idx]).replace("\n", " ").strip()
+                            if cell:
+                                parts.append(cell)
+                    if parts:
+                        return "; ".join(parts)
+    except Exception:
+        pass
+    return None
+
+
+def _extract_nonmedicinal_ingredients(s6_text: str) -> Optional[str]:
+    """Copy the Non-medicinal Ingredients list VERBATIM from §6 text.
+
+    Two layouts handled (priority order):
+    1. Inline: heading immediately followed by ": content" on same line.
+    2. Block:  heading alone on one line, content on subsequent lines.
+
+    Returns text exactly as it appears in the PDF — no normalisation.
+    """
+    def _collect_after(text_after: str) -> Optional[str]:
+        lines = text_after.split("\n")
+        collected: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                if collected:
+                    break
+                continue
+            if collected and _NM_END_RE.match(stripped):
+                break
+            collected.append(stripped)
+        return " ".join(collected).strip() if collected else None
+
+    # Priority 1: inline format — heading + ": content" on same line
+    inline_re = re.compile(
+        r"(?:Clinically\s+Relevant\s+)?Non[-\s]?medicinal\s+Ingredients?\s*:\s*"
+        r"|Nonmedical\s+Ingredients?\s*:\s*",
+        re.IGNORECASE,
+    )
+    for m in inline_re.finditer(s6_text):
+        after = s6_text[m.end():]
+        result = _collect_after(after)
+        if result:
+            return result
+
+    # Priority 2: block format — heading on its own line
+    m = _NM_HEADING_RE.search(s6_text)
+    if not m:
+        return None
+    after = re.sub(r"^\s*[:\-]?\s*", "", s6_text[m.end():])
+    return _collect_after(after)
+
+
 def _extract_ph_regex(s13_text: str) -> str:
     conc_entries = re.findall(
         r"pH\s+\d+(?:\.\d+)?\s*[:\-]\s*(?:<|>)?[\d.]+\s*(?:mg|µg|ug)/",
@@ -950,8 +1097,8 @@ def _extract_appearance_regex(
     desc_text: str,
     target_strength: Optional[str],
 ) -> dict[str, Optional[str]]:
-    """Extract colour/shape/size/weight, scoped to target_strength block if possible."""
-    out: dict[str, Optional[str]] = {"colour": None, "shape": None, "size_mm": None, "weight": None}
+    """Extract color/shape/size/weight, scoped to target_strength block if possible."""
+    out: dict[str, Optional[str]] = {"color": None, "shape": None, "size_mm": None, "weight": None}
 
     block_text = desc_text
     if target_strength:
@@ -973,9 +1120,9 @@ def _extract_appearance_regex(
             if lm:
                 block_text = lm.group(0)
 
-    cm = re.search(_COLOUR_WORDS, block_text, re.IGNORECASE)
+    cm = re.search(_COLOR_WORDS, block_text, re.IGNORECASE)
     if cm:
-        out["colour"] = cm.group(0).strip()
+        out["color"] = cm.group(0).strip()
 
     sm = re.search(_SHAPE_WORDS, block_text, re.IGNORECASE)
     if sm:
@@ -995,7 +1142,9 @@ def _extract_appearance_regex(
 # ── §6 / §13 markers ─────────────────────────────────────────────────────────
 
 _S6_MARKERS = [
-    r"^6[\.\s]+DOSAGE FORMS?,?\s*COMPOSITION",
+    # Matches "6 DOSAGE FORMS, COMPOSITION..." and "6. Dosage Forms, Strengths, Composition..."
+    # Negative lookahead rejects TOC entries which have dot leaders like "..........9"
+    r"^6[\.\s]+DOSAGE FORMS?(?!.*\.{4,}).*COMPOSITION",
     r"^6[\.\s]+PHARMACEUTICAL INFORMATION",
     r"^PART II.*SCIENTIFIC INFORMATION",
 ]
@@ -1020,7 +1169,7 @@ async def parse_labeling_fields_async(
     """Extract Stage 3 label fields from pre-extracted PDF pages.
 
     Only extracts: excipients_core, excipients_coating, preservatives,
-                   ph, colour, shape, size_mm, weight.
+                   ph, color, shape, size_mm, weight.
     Does NOT extract: active_ingredient, pack_size, pack_style
                       (those come from Stage 2 / DPD API).
 
@@ -1047,33 +1196,15 @@ async def parse_labeling_fields_async(
     desc_page = desc_section[0] if desc_section else s6_page
     desc_text = desc_section[1] if desc_section else s6_text
 
-    # ── Excipients ────────────────────────────────────────────────────────────
-    excip_section_text = s6_text
-    nm_match = re.search(
-        r"(?:Non-?[Mm]edicinal|[Ii]nactive|[Ee]xcipient)[^\n]{0,60}\n(.{50,}?)(?=\n\n|\Z)",
-        s6_text, re.DOTALL,
-    )
-    if nm_match:
-        excip_section_text = nm_match.group(0)
+    # ── Non-medicinal Ingredients (verbatim, always deterministic) ───────────
+    nm_val = _extract_nonmedicinal_ingredients(s6_text)
+    row["nonmedicinal_ingredients"] = nm_val if nm_val else NOT_IN_PM
+    row["nonmedicinal_ingredients_page"] = s6_page if nm_val else None
 
-    provider_excip = await _query_provider_cached(excip_section_text, s6_page or 1, "excipients")
-    if provider_excip:
-        _apply_provider_result(row, provider_excip, ["excipients_core", "excipients_coating", "preservatives"], s6_page)
-    else:
-        # Deterministic regex path (active by default with NullProvider)
-        ai_pdf = _extract_active_ingredient_regex(s6_text)
-        row["active_ingredient"] = ai_pdf if ai_pdf else NOT_IN_PM
-        row["active_ingredient_page"] = s6_page if ai_pdf else None
-
-        core, coating = _extract_excipients_regex(s6_text)
-        row["excipients_core"] = core if core else NOT_IN_PM
-        row["excipients_core_page"] = s6_page if core else None
-        row["excipients_coating"] = coating if coating else NOT_IN_PM
-        row["excipients_coating_page"] = s6_page if coating else None
-
-        pres = _classify_preservatives(s6_text)
-        row["preservatives"] = pres
-        row["preservatives_page"] = s6_page if pres not in (NOT_IN_PM,) else None
+    # Active ingredient PDF fallback (DPD API is authoritative; overridden in enrich_labeling)
+    ai_pdf = _extract_active_ingredient_regex(s6_text)
+    row["active_ingredient"] = ai_pdf if ai_pdf else NOT_IN_PM
+    row["active_ingredient_page"] = s6_page if ai_pdf else None
 
     # ── Appearance ────────────────────────────────────────────────────────────
     if din_strength and desc_text:
@@ -1085,15 +1216,15 @@ async def parse_labeling_fields_async(
         provider_app = await _query_provider_cached(desc_text or s6_text, desc_page or 1, "appearance")
 
     if provider_app:
-        _apply_provider_result(row, provider_app, ["colour", "shape", "size_mm", "weight"], desc_page)
+        _apply_provider_result(row, provider_app, ["color", "shape", "size_mm", "weight"], desc_page)
     else:
         if desc_text:
             norm_strength = _normalize_strength(din_strength) if din_strength else None
             app = _extract_appearance_regex(desc_text, norm_strength)
         else:
-            app = {"colour": None, "shape": None, "size_mm": None, "weight": None}
+            app = {"color": None, "shape": None, "size_mm": None, "weight": None}
 
-        for field in ("colour", "shape", "size_mm", "weight"):
+        for field in ("color", "shape", "size_mm", "weight"):
             val = app.get(field)
             row[field] = val if val else NOT_IN_PM
             row[f"{field}_page"] = desc_page if val else None
@@ -1110,11 +1241,14 @@ async def parse_labeling_fields_async(
         row["ph"] = NOT_IN_PM
         row["ph_page"] = None
 
-    # ── pack_style from PDF §6 (Stage 2 DPD API overrides in enrich_labeling) ─
+    # ── pack_size + pack_style from PDF §6 (Stage 2 DPD API overrides in enrich_labeling) ─
+    pdf_pack_size, pdf_pack_style = _extract_packaging_from_pdf(s6_text)
     if "pack_style" not in row:
-        ps_pdf = _extract_pack_style_from_pdf(s6_text)
-        row["pack_style"] = ps_pdf if ps_pdf else NOT_IN_PM
-        row["pack_style_page"] = s6_page if ps_pdf else None
+        row["pack_style"] = pdf_pack_style if pdf_pack_style else NOT_IN_PM
+        row["pack_style_page"] = s6_page if pdf_pack_style else None
+    if "pack_size" not in row:
+        row["pack_size"] = pdf_pack_size if pdf_pack_size else NOT_IN_PM
+        row["pack_size_page"] = s6_page if pdf_pack_size else None
 
     row["needs_ocr"] = 0  # overridden by enrich_labeling() if OCR was used
     row["has_unverified"] = 0
@@ -1135,7 +1269,7 @@ def parse_labeling_fields(
 # ── Public named wrappers for test introspection ──────────────────────────────
 
 def _extract_strength_block(description: str, target_strength: str) -> dict[str, Optional[str]]:
-    """Public alias used by tests: extract colour/shape/size/weight for one strength."""
+    """Public alias used by tests: extract color/shape/size/weight for one strength."""
     return _extract_appearance_regex(description, target_strength)
 
 
@@ -1300,7 +1434,7 @@ async def enrich_labeling_batch_fast(
       DINs sharing the same Product Monograph URL trigger one PDF download and
       one pdfplumber/OCR extraction pass.  parse_labeling_fields_async() is
       then called per-DIN with its specific strength so per-strength appearance
-      fields (colour, shape, size) are extracted correctly.
+      fields (color, shape, size) are extracted correctly.
 
     Speedup 3 — thread pool (via _extract_text_async):
       PDF extraction is CPU-bound and synchronous.  Running it in the thread
@@ -1528,6 +1662,20 @@ def _run_pack_style_validation() -> None:
             "expected_pack_style": "Blister Pack",
             "expected_pack_size": "100, 500 count",
         },
+        {
+            "din": "02XXX000",
+            "label": "Icosapent 1g capsule — blister + bottle",
+            "product_information": "8 COUNT BLISTERS AND BOTTLES OF 120 CAPSULES",
+            "expected_pack_style": "Blister",
+            "expected_pack_size": "8-count blister; 120-count bottle",
+        },
+        {
+            "din": "02XXX001",
+            "label": "Icosapent — blister only (no capsules keyword)",
+            "product_information": "8 COUNT BLISTERS",
+            "expected_pack_style": "Blister",
+            "expected_pack_size": "8 count",
+        },
     ]
 
     print("\n=== Fix 1 & 2 Validation: pack_style / pack_size from product_information ===\n")
@@ -1555,14 +1703,18 @@ def _run_pack_style_validation() -> None:
         )
 
     print()
-    # Verify container words don't leak into pack_size
+    # Verify container words don't leak into pack_size *unintentionally*.
+    # Multi-container cases (e.g. "8-count blister; 120-count bottle") deliberately
+    # include the container name — skip those whose expected value already contains it.
     for tc in test_cases:
         size = _extract_pack_size_from_product_info(tc["product_information"])
+        expected = tc.get("expected_pack_size") or ""
         if size:
             for _, label in _CONTAINER_VOCAB_ORDERED:
                 if label.upper() in (size or "").upper():
-                    print(f"FAIL: container word '{label}' leaked into pack_size={size!r} for DIN {tc['din']}")
-                    all_ok = False
+                    if label.lower() not in expected.lower():
+                        print(f"FAIL: container word '{label}' leaked into pack_size={size!r} for DIN {tc['din']}")
+                        all_ok = False
 
     if all_ok:
         print("All Fix 1 & 2 assertions passed.")
