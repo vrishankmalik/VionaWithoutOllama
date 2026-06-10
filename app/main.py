@@ -1,4 +1,4 @@
-"""Health Canada Database Aggregator — FastAPI main application."""
+"""Zydus Drug Intelligence Platform — FastAPI main application."""
 from __future__ import annotations
 
 import asyncio
@@ -39,7 +39,7 @@ from app.sources.generic_submissions import search_generic_submissions
 from app.sources.noc import search_noc
 from app.sources.patent_register import search_patent_register
 
-app = FastAPI(title="Health Canada Database Aggregator", version="1.0.0")
+app = FastAPI(title="Zydus Drug Intelligence Platform", version="1.0.0")
 
 # CORS — lets Power BI Service, Fabric notebooks, and other browser clients call the API.
 app.add_middleware(
@@ -491,33 +491,18 @@ _HTML_UI = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Health Canada Database Aggregator</title>
-<!--
-  Zydus palette (extracted from zydususa.com/wp-content/themes/zydus-pharmaceuticals/css/style_v2.css):
-    Purple (primary): #AA55A0
-    Deep purple:      #3D226E
-    Teal (secondary): #00A5A5
-    Teal dark:        #008BAD
-    Teal deeper:      #00586E
-    Light teal:       #5AC3BE
-    Body text:        #58595B
-    Border:           #D1D1D1
-    Card bg:          #FFFFFF
-    Page bg:          #FAFAFA
-    Font (primary):   "Exo" (Google Fonts)
-    Font (body):      "Inter", sans-serif
--->
+<title>Zydus Drug Intelligence Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Exo:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
-  /* ── Zydus brand design tokens ───────────────────────────────────────── */
+  /* ── Design tokens ───────────────────────────────────────────────────── */
   :root {
-    --primary:      #AA55A0;   /* Zydus purple */
-    --primary-dark: #3D226E;   /* deep purple — hover / nav */
-    --teal:         #00A5A5;   /* Zydus teal */
-    --teal-dark:    #008BAD;   /* teal hover */
-    --nav-bg:       #3D226E;   /* deep purple nav bar */
+    --primary:      #AA55A0;
+    --primary-dark: #3D226E;
+    --teal:         #00A5A5;
+    --teal-dark:    #008BAD;
+    --nav-bg:       #3D226E;
     --bg:           #FAFAFA;
     --card:         #FFFFFF;
     --border:       #D1D1D1;
@@ -526,10 +511,10 @@ _HTML_UI = """<!DOCTYPE html>
     --ok:           #00A5A5;
     --warn:         #B45309;
     --err:          #C0392B;
-    --badge-dpd:    #3D226E;   /* deep purple */
-    --badge-gen:    #AA55A0;   /* purple */
-    --badge-noc:    #00A5A5;   /* teal */
-    --badge-pr:     #008BAD;   /* teal-dark */
+    --badge-dpd:    #3D226E;
+    --badge-gen:    #AA55A0;
+    --badge-noc:    #00A5A5;
+    --badge-pr:     #008BAD;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
@@ -542,13 +527,6 @@ _HTML_UI = """<!DOCTYPE html>
     align-items: center;
     height: 52px;
     gap: 16px;
-  }
-  .nav-zydus-logo {
-    height: 28px;
-    width: auto;
-    flex-shrink: 0;
-    filter: brightness(0) invert(1);
-    opacity: 0.92;
   }
   .site-nav-brand-wrap { display: flex; flex-direction: column; gap: 0; }
   .site-nav-brand {
@@ -589,21 +567,6 @@ _HTML_UI = """<!DOCTYPE html>
     align-items: center;
     gap: 18px;
     margin-bottom: 10px;
-  }
-  .header-logo-viona {
-    height: 56px;
-    width: auto;
-    flex-shrink: 0;
-    filter: brightness(0) invert(1);
-    opacity: 0.95;
-  }
-  .header-logo-zydus {
-    height: 40px;
-    width: auto;
-    flex-shrink: 0;
-    filter: brightness(0) invert(1);
-    opacity: 0.88;
-    margin-left: 4px;
   }
   .header-company-name {
     font-size: 0.68rem;
@@ -975,7 +938,6 @@ _HTML_UI = """<!DOCTYPE html>
 </head>
 <body>
 <nav class="site-nav" role="navigation" aria-label="Site navigation">
-  <img class="nav-zydus-logo" src="/static/zydus_logo.png" alt="Zydus" />
   <div class="site-nav-brand-wrap">
     <span class="site-nav-brand">Zydus</span>
     <span class="site-nav-sub">Dedicated To Life</span>
@@ -987,11 +949,9 @@ _HTML_UI = """<!DOCTYPE html>
 </nav>
 <header role="banner">
   <div class="header-brand-row">
-    <img class="header-logo-viona" src="/static/viona_logo.png" alt="Viona" />
-    <img class="header-logo-zydus" src="/static/zydus_logo.png" alt="Zydus" />
     <div>
       <div class="header-company-name">Zydus &nbsp;&mdash;&nbsp; Dedicated To Life</div>
-      <h1>Health Canada Database Aggregator</h1>
+      <h1>Drug Intelligence Platform</h1>
     </div>
   </div>
   <p>Simultaneous search across DPD &middot; Generic Submissions Under Review &middot; Notice of Compliance &middot; Patent Register</p>
@@ -1068,7 +1028,7 @@ _HTML_UI = """<!DOCTYPE html>
 <footer role="contentinfo">
   <strong style="color:var(--primary);font-family:'Exo',sans-serif">Zydus</strong> <span style="color:var(--muted);font-size:0.76rem">— Dedicated To Life</span>
   <br/>
-  Data sourced from Health Canada public databases (DPD, NOC, Patent Register, GSUR). &nbsp;|&nbsp;
+  Data sourced from Canadian government public databases (DPD, NOC, Patent Register, GSUR). &nbsp;|&nbsp;
   Accuracy relies on deterministic extraction — no AI-generated data fields.
 </footer>
 

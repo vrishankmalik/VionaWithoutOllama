@@ -1,6 +1,6 @@
-# Canadian Drug Database Aggregator — Fabric Edition
+# Zydus Drug Intelligence Platform
 
-A local/cloud web application that searches four Canadian health-product databases simultaneously and returns consolidated results viewable in a web UI or downloadable as XLSX. This copy is **Ollama/llama3-free** and is structured for Microsoft Fabric or any hosted environment.
+A local/cloud web application that searches four Canadian government drug databases simultaneously and returns consolidated results viewable in a web UI or downloadable as XLSX. Ollama/llama3-free and structured for Microsoft Fabric or any hosted environment.
 
 ## Development Rules
 
