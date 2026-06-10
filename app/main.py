@@ -1005,7 +1005,7 @@ _HTML_UI = """<!DOCTYPE html>
 <header role="banner">
   <div class="header-brand-row">
     <div>
-      <div class="header-company-name">Zydus &nbsp;&mdash;&nbsp; Dedicated To Life</div>
+      <div class="header-company-name">Zydus &nbsp;&middot;&nbsp; Dedicated To Life</div>
       <h1>Drug Intelligence Platform</h1>
     </div>
   </div>
@@ -1015,7 +1015,7 @@ _HTML_UI = """<!DOCTYPE html>
   <div class="search-box">
     <div class="row">
       <div class="field-group" style="flex:1">
-        <label for="query">Ingredients <span id="queryCount" style="font-weight:400;color:var(--muted);font-size:0.72rem">&mdash; one per line or comma-separated; export runs all</span></label>
+        <label for="query">Ingredients <span id="queryCount" style="font-weight:400;color:var(--muted);font-size:0.72rem">(one per line or comma-separated; export runs all)</span></label>
         <textarea id="query" rows="3" style="resize:vertical;min-width:300px;font-family:inherit;padding:9px 13px;border:1px solid var(--border);border-radius:3px;font-size:0.92rem;color:var(--text);background:#fff;transition:border-color .15s,box-shadow .15s;outline:none" placeholder="alpelisib&#10;apremilast&#10;abrocitinib&#10;or: alpelisib, apremilast" oninput="updateQueryCount()"></textarea>
         <div id="queryHint" style="font-size:0.72rem;color:var(--muted);margin-top:3px"></div>
       </div>
@@ -1057,7 +1057,7 @@ _HTML_UI = """<!DOCTYPE html>
   <!-- Dashboard panel: shown after export completes; renders exact XLSX dataset -->
   <div class="dashboard-panel" id="dashboardPanel">
     <div class="dashboard-header">
-      <span class="dashboard-title">📊 Enriched Dashboard — same dataset as XLSX</span>
+      <span class="dashboard-title">📊 Enriched Dashboard (same dataset as XLSX)</span>
       <span style="font-size:0.8rem;color:var(--muted)" id="dashMeta"></span>
     </div>
     <div class="canary-box" id="canaryBox"></div>
@@ -1071,10 +1071,10 @@ _HTML_UI = """<!DOCTYPE html>
   </div>
 </div>
 <footer role="contentinfo">
-  <strong style="color:var(--primary);font-family:'Exo',sans-serif">Zydus</strong> <span style="color:var(--muted);font-size:0.76rem">— Dedicated To Life</span>
+  <strong style="color:var(--primary);font-family:'Exo',sans-serif">Zydus</strong> <span style="color:var(--muted);font-size:0.76rem">· Dedicated To Life</span>
   <br/>
   Data sourced from Canadian government public databases (DPD, NOC, Patent Register, GSUR). &nbsp;|&nbsp;
-  Accuracy relies on deterministic extraction — no AI-generated data fields.
+  Accuracy relies on deterministic extraction. No generated data fields.
 </footer>
 
 <script>
@@ -1162,9 +1162,9 @@ function updateQueryCount() {
   if (qs.length === 0) {
     hint.textContent = '';
   } else if (qs.length === 1) {
-    hint.textContent = `1 ingredient — Search previews it; Export runs it.`;
+    hint.textContent = `1 ingredient: Search previews it; Export runs it.`;
   } else {
-    hint.textContent = `${qs.length} ingredients: ${qs.map(q => '“' + q + '”').join(', ')} — Search previews the first; Export runs all side-by-side.`;
+    hint.textContent = `${qs.length} ingredients: ${qs.map(q => '”' + q + '”').join(', ')}. Search previews the first; Export runs all side-by-side.`;
   }
 }
 
@@ -1230,13 +1230,13 @@ function buildTable(source, records) {
         v = `<span class="badge badge-${r.source}" style="font-size:.7rem">${r.source}</span>`;
       } else {
         v = fieldVal(r, c.key);
-        v = v ? escHtml(v) : '<span style="color:#aaa">—</span>';
+        v = v ? escHtml(v) : '<span style="color:#aaa">-</span>';
       }
       html += `<td>${v}</td>`;
     });
     const link = r.record_url
       ? `<a class="record-link" href="${escHtml(r.record_url)}" target="_blank" rel="noopener">View ↗</a>`
-      : '—';
+      : '-';
     html += `<td>${link}</td></tr>`;
   });
   html += '</tbody></table>';
@@ -1300,7 +1300,7 @@ function render(data) {
 
   const aiDiv = document.getElementById('aiSummary');
   if (ai_summary) {
-    aiDiv.innerHTML = `<strong>🤖 AI Summary</strong> <em style="font-size:.75rem;color:#666">(AI-generated, may be imprecise — verify against raw data)</em><br/>${ai_summary}`;
+    aiDiv.innerHTML = `<strong>🤖 Summary</strong> <em style="font-size:.75rem;color:#666">(generated, may be imprecise; verify against raw data)</em><br/>${ai_summary}`;
     aiDiv.style.display = 'block';
   } else {
     aiDiv.style.display = 'none';
@@ -1343,7 +1343,7 @@ async function doSearch() {
   if (queries.length > 1) {
     // Show a brief notice that only the first is being previewed
     document.getElementById('queryHint').innerHTML =
-      `<span style="color:var(--warn)">Previewing <strong>"${escHtml(q)}"</strong> only &mdash; Export will run all ${queries.length} ingredients side-by-side.</span>`;
+      `<span style="color:var(--warn)">Previewing <strong>"${escHtml(q)}"</strong> only. Export will run all ${queries.length} ingredients side-by-side.</span>`;
   }
 
   document.getElementById('searchBtn').disabled = true;
@@ -1433,7 +1433,7 @@ async function resetAllCaches() {
   if (!confirm('Clear all cached data? The next search will re-fetch live data from all sources.')) return;
   const resp = await fetch('/api/reset-all-caches', {method: 'POST'});
   const data = await resp.json();
-  alert(`Cache cleared — ${data.http_rows_cleared} search results, ${data.patent_rows_cleared} patent records, ${data.labeling_rows_cleared} labeling records removed.`);
+  alert(`Cache cleared: ${data.http_rows_cleared} search results, ${data.patent_rows_cleared} patent records, ${data.labeling_rows_cleared} labeling records removed.`);
 }
 
 async function doExport() {
@@ -1493,7 +1493,7 @@ async function doExport() {
 
   es.onerror = () => {
     if (currentJobId !== jobId) return; // stale
-    _appendLog('Connection lost — check server', 'log-err');
+    _appendLog('Connection lost. Check server.', 'log-err');
     document.getElementById('exportStageLabel').textContent = 'Connection error';
     document.getElementById('exportBtn').disabled = false;
     es.close();
@@ -1516,7 +1516,7 @@ function _dashTable(columns, records) {
     html += '<tr>';
     columns.forEach(c => {
       const v = row[c];
-      html += `<td>${v != null && v !== '' ? escHtml(String(v)) : '<span style="color:#aaa">—</span>'}</td>`;
+      html += `<td>${v != null && v !== '' ? escHtml(String(v)) : '<span style="color:#aaa">-</span>'}</td>`;
     });
     html += '</tr>';
   });
