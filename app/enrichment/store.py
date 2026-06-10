@@ -146,6 +146,16 @@ def get_patents_for_din(din: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def is_patent_stale(din: str, ttl: float) -> bool:
+    """Return True if the patent rows for this DIN are absent or older than ttl seconds."""
+    row = get_conn().execute(
+        "SELECT MAX(fetched_at) AS fetched_at FROM patents WHERE din = ?", (din,)
+    ).fetchone()
+    if row is None or row["fetched_at"] is None:
+        return True
+    return (time.time() - row["fetched_at"]) > ttl
+
+
 def log_discrepancy(
     din: str,
     patent_number: str,
@@ -209,6 +219,16 @@ def get_labeling_for_din(din: str) -> Optional[dict]:
         "SELECT * FROM labeling WHERE din = ?", (din,)
     ).fetchone()
     return dict(row) if row else None
+
+
+def is_labeling_stale(din: str, ttl: float) -> bool:
+    """Return True if the labeling record is absent or was fetched more than ttl seconds ago."""
+    row = get_conn().execute(
+        "SELECT fetched_at FROM labeling WHERE din = ?", (din,)
+    ).fetchone()
+    if row is None:
+        return True
+    return (time.time() - row["fetched_at"]) > ttl
 
 
 def reset_labeling_table() -> int:

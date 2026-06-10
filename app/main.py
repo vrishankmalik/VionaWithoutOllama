@@ -8,18 +8,27 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import SOURCE_TIMEOUT
+from app.config import (
+    CORS_ALLOWED_ORIGINS,
+    FABRIC_CONTAINER,
+    FABRIC_FOLDER,
+    FABRIC_ONELAKE_URL,
+    FABRIC_STORAGE_KEY,
+    SOURCE_TIMEOUT,
+)
 from app.consistency import check_cross_source_consistency
 from app.enrichment.data_protection import fetch_data_protection_table
 from app.enrichment.labeling import enrich_labeling_batch
 from app.enrichment.patents import enrich_patents
 from app.enrichment.store import get_labeling_for_din, reset_labeling_table
-from app.enrichment.workbook import _is_excluded_din, build_workbook
+from app.enrichment.workbook import _is_excluded_din, build_sheet1, build_sheet2, build_workbook
 from app.export_job import run_export_job
 from app.jobs import create_job, get_job
 from app.match import generate_summary
@@ -31,6 +40,14 @@ from app.sources.noc import search_noc
 from app.sources.patent_register import search_patent_register
 
 app = FastAPI(title="Health Canada Database Aggregator", version="1.0.0")
+
+# CORS — lets Power BI Service, Fabric notebooks, and other browser clients call the API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 import pathlib as _pathlib
 _static_dir = _pathlib.Path(__file__).parent / "static"
@@ -157,6 +174,161 @@ async def export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── Power BI / Microsoft Fabric integration ───────────────────────────────────
+
+def _df_to_table(df: "pd.DataFrame") -> dict:
+    """Convert a DataFrame to {columns, records} dict suitable for JSON consumers."""
+    if df is None or df.empty:
+        return {"columns": [], "records": []}
+    clean = df.where(pd.notna(df), None)
+    return {"columns": list(clean.columns), "records": clean.to_dict("records")}
+
+
+async def _enrich_for_export(
+    result: SearchResponse,
+    allow_partial: bool,
+) -> tuple[dict, "pd.DataFrame", "pd.DataFrame"]:
+    """Run patents + labeling enrichment and return (error_sources, sheet1_df, sheet2_df)."""
+    error_sources: dict[str, Optional[str]] = {
+        s.source: s.error_message for s in result.sources if s.status == "error"
+    }
+    if error_sources and not allow_partial:
+        names = ", ".join(error_sources.keys())
+        raise HTTPException(
+            status_code=409,
+            detail=f"Source(s) failed: {names}. Pass allow_partial=true to override.",
+        )
+
+    all_valid_dins = [
+        r.din for s in result.sources for r in s.records if not _is_excluded_din(r.din)
+    ]
+    if all_valid_dins:
+        await enrich_patents(all_valid_dins)
+
+    din_map: dict[str, tuple[int, Optional[str]]] = {}
+    for s in result.sources:
+        if s.source != "DPD":
+            continue
+        for r in s.records:
+            if _is_excluded_din(r.din):
+                continue
+            drug_code_raw = r.source_specific.get("drug_code")
+            if drug_code_raw is None:
+                continue
+            try:
+                din_key = r.din.strip()  # type: ignore[union-attr]
+                if get_labeling_for_din(din_key) is None:
+                    din_map[din_key] = (int(drug_code_raw), r.strength)
+            except (ValueError, TypeError):
+                pass
+    if din_map:
+        await enrich_labeling_batch(din_map)
+
+    dp_table = await fetch_data_protection_table()
+    s1_df = build_sheet1(result, dp_table=dp_table)
+    s2_df = build_sheet2(result)
+    return error_sources, s1_df, s2_df
+
+
+@app.get("/api/powerbi")
+async def powerbi_data(
+    q: str = Query(..., description="Search term (ingredient, brand, company, or DIN)"),
+    field: str = Query("ingredient", description="ingredient | brand | company | din"),
+    allow_partial: bool = Query(True, description="Return data even if a source errors"),
+) -> dict:
+    """Power BI & Microsoft Fabric JSON data endpoint.
+
+    Returns Sheet 1 (DPD + NOC + Patents + Labeling) and Sheet 2 (Generic Submissions)
+    as flat JSON arrays.  Consumed directly by the Power BI Web connector or a Fabric
+    notebook — no job polling required.
+
+    First call performs live enrichment (30–120 s); subsequent calls return cached data
+    in under 2 s.
+
+    Power BI Web connector URL pattern:
+        GET http://<host>:8000/api/powerbi?q=alpelisib&field=ingredient
+    """
+    result = await search(q=q, field=field, summary=False)
+    _, s1_df, s2_df = await _enrich_for_export(result, allow_partial)
+    return {
+        "query": q,
+        "field": field,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "sheet1": _df_to_table(s1_df),
+        "sheet2": _df_to_table(s2_df),
+    }
+
+
+@app.post("/api/fabric/push")
+async def fabric_push(
+    q: str = Query(..., description="Search term"),
+    field: str = Query("ingredient"),
+    allow_partial: bool = Query(True),
+) -> dict:
+    """Push enriched XLSX directly to Azure Data Lake Storage Gen2 / OneLake.
+
+    Requires FABRIC_ONELAKE_URL and FABRIC_CONTAINER env vars to be set.
+    Uses azure-storage-blob + azure-identity (install separately).
+    Falls back to a 501 if those packages are not installed or vars are missing.
+
+    Returns {"status": "ok", "path": "<datalake path>"} on success.
+    """
+    if not FABRIC_ONELAKE_URL or not FABRIC_CONTAINER:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Fabric push not configured. "
+                "Set FABRIC_ONELAKE_URL and FABRIC_CONTAINER environment variables."
+            ),
+        )
+
+    try:
+        from azure.identity import DefaultAzureCredential  # type: ignore[import]
+        from azure.storage.blob import BlobServiceClient  # type: ignore[import]
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "azure-storage-blob and azure-identity are required for Fabric push. "
+                "Run: pip install azure-storage-blob azure-identity"
+            ),
+        )
+
+    result = await search(q=q, field=field, summary=False)
+    error_sources, s1_df, s2_df = await _enrich_for_export(result, allow_partial)
+
+    dp_table = await fetch_data_protection_table()
+    xlsx_bytes = build_workbook(
+        result,
+        source_errors=error_sources if allow_partial and error_sources else None,
+        dp_table=dp_table,
+    )
+
+    # Authenticate — Managed Identity on Fabric, fallback to storage key if provided
+    if FABRIC_STORAGE_KEY:
+        client = BlobServiceClient(
+            account_url=FABRIC_ONELAKE_URL,
+            credential=FABRIC_STORAGE_KEY,
+        )
+    else:
+        client = BlobServiceClient(
+            account_url=FABRIC_ONELAKE_URL,
+            credential=DefaultAzureCredential(),
+        )
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    blob_name = f"{FABRIC_FOLDER}/{q.replace(' ', '_')}_{field}_{ts}.xlsx"
+    blob_client = client.get_blob_client(container=FABRIC_CONTAINER, blob=blob_name)
+    blob_client.upload_blob(
+        xlsx_bytes,
+        overwrite=True,
+        content_settings={"content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    )
+
+    full_path = f"{FABRIC_ONELAKE_URL}/{FABRIC_CONTAINER}/{blob_name}"
+    return {"status": "ok", "path": full_path, "rows_sheet1": len(s1_df), "rows_sheet2": len(s2_df)}
 
 
 # ── Cache management ──────────────────────────────────────────────────────────

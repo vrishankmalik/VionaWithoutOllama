@@ -10,8 +10,9 @@ from typing import Optional
 @dataclasses.dataclass
 class JobState:
     job_id: str
-    query: str
+    query: str   # primary query (first in list, or the single query)
     field: str
+    queries: list[str] = dataclasses.field(default_factory=list)  # full list for multi-product
     status: str = "running"  # running | complete | error
     events: list[dict] = dataclasses.field(default_factory=list)
     # Signalled whenever a new event is appended
@@ -19,13 +20,31 @@ class JobState:
     result_path: Optional[str] = None
     error: Optional[str] = None
     created_at: float = dataclasses.field(default_factory=time.time)
+    # Snapshot of the final Sheet 1 and Sheet 2 DataFrames (identical to what
+    # was written to the XLSX).  These are the single source of truth for the
+    # dashboard view — the dashboard must read from here, never re-scrape.
+    sheet1_columns: list[str] = dataclasses.field(default_factory=list)
+    sheet1_records: list[dict] = dataclasses.field(default_factory=list)
+    sheet2_columns: list[str] = dataclasses.field(default_factory=list)
+    sheet2_records: list[dict] = dataclasses.field(default_factory=list)
 
 
 _jobs: dict[str, JobState] = {}
 
 
-def create_job(job_id: str, query: str, field: str) -> JobState:
-    job = JobState(job_id=job_id, query=query, field=field)
+def create_job(
+    job_id: str,
+    query: str,
+    field: str,
+    queries: Optional[list[str]] = None,
+) -> JobState:
+    effective_queries = queries or [query]
+    job = JobState(
+        job_id=job_id,
+        query=query,
+        field=field,
+        queries=effective_queries,
+    )
     _jobs[job_id] = job
     return job
 

@@ -246,6 +246,7 @@ async def search_noc(
                         "therapeutic_class": main.get("noc_therapeutic_class"),
                         "noc_number": nn,
                         "submission_class": main.get("noc_submission_class"),
+                        "reason_for_supplement": main.get("noc_reason_supplement") or main.get("noc_reason_submission") or None,
                     },
                 )
             )

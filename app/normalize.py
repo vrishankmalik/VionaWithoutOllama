@@ -87,6 +87,17 @@ _STATIC_SYNONYMS: dict[str, list[str]] = {
     "methotrexate": ["rheumatrex", "trexall"],
     "adalimumab": ["humira"],
     "trastuzumab": ["herceptin"],
+    "dupilumab": ["dupixent"],
+    "nivolumab": ["opdivo"],
+    "pembrolizumab": ["keytruda"],
+    "abrocitinib": ["cibinqo"],
+    "apremilast": ["otezla"],
+    "osimertinib": ["tagrisso"],
+    "venetoclax": ["venclexta"],
+    "sacubitril": ["entresto"],
+    "lecanemab": ["leqembi"],
+    "alpelisib": ["piqray"],
+    "linagliptin": ["trajenta"],
 }
 
 
