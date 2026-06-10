@@ -1033,7 +1033,7 @@ _HTML_UI = """<!DOCTYPE html>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-primary" id="searchBtn" onclick="doSearch()">Search</button>
           <button class="btn btn-export" id="exportBtn" onclick="doExport()" disabled>⬇ Export XLSX</button>
-          <button class="btn" style="background:#888;color:white;font-size:0.8em;padding:4px 10px;" onclick="resetAllCaches()" title="Clear all cached data and force fresh fetches from all sources">Reset cache</button>
+          <button class="btn" style="background:#888;color:white;" onclick="resetAllCaches()" title="Clear all cached data and force fresh fetches from all sources">Reset cache</button>
         </div>
       </div>
     </div>
