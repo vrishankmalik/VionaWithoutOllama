@@ -14,7 +14,8 @@ Stage 3 (this file, bottom half): PDF extraction
     ph, colour, shape, size_mm, weight
   Per-strength matching: use the DIN's strength to scope §6 Description block.
   Section location by keyword → only that section passed to Ollama or regex.
-  If Ollama (llama3) is available it is preferred; regex is the fallback.
+  Regex extraction is the active path by default (NullProvider). A configured
+  LLM provider (e.g. LLM_PROVIDER=azure_openai) is preferred when available.
 
   Scanned PDFs: OCR'd page-by-page via pdf2image + pytesseract (ENABLE_OCR=1 default).
   OCR text is disk-cached by PDF URL (7-day TTL). The is_scanned() guard no longer
@@ -51,9 +52,8 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.cache import cache_get, cache_set
-from app.config import (
-    DPD_BASE, ENABLE_OCR, HTTP_TIMEOUT, OLLAMA_BASE_URL, OLLAMA_MODEL, USER_AGENT,
-)
+from app.config import DPD_BASE, ENABLE_OCR, HTTP_TIMEOUT, USER_AGENT
+from app.llm.provider import get_llm_provider
 from app.enrichment.store import get_labeling_for_din, upsert_labeling
 
 logger = logging.getLogger(__name__)
@@ -658,172 +658,72 @@ def _normalize_strength(raw: str) -> str:
     return f"{num_str} {unit}".strip() if unit else num_str
 
 
-# ── Stage 3: Ollama extraction ────────────────────────────────────────────────
-
-async def _is_ollama_available() -> bool:
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
-        return r.status_code == 200
-    except Exception:
-        return False
+# ── Stage 3: LLM provider extraction ─────────────────────────────────────────
+#
+# In-flight dedup: N DINs sharing one PM fire one provider call, not N.
+# Still valuable with any non-null provider; no-op overhead with NullProvider.
+_LLM_INFLIGHT: dict[str, "asyncio.Future[dict]"] = {}
+_LLM_INFLIGHT_LOCK = asyncio.Lock()
 
 
-async def _query_ollama(section_text: str, page_num: int, field_group: str) -> dict:
-    """Query Ollama llama3 for one field group from a section of PM text.
-
-    field_group: "excipients" | "appearance" | "ph"
-    Returns dict of field → {"value": str|None, "found": bool, "page": int|None}
-
-    Rules enforced in the prompt:
-      - One group per call (never all 8 fields at once)
-      - temperature=0, num_ctx=8192
-      - Copy verbatim; do NOT invent or paraphrase
-      - found=false + value=null means "searched, absent" — valid
-    """
-    if field_group == "excipients":
-        fields_desc = {
-            "excipients_core": (
-                "Non-medicinal / inactive ingredients in the tablet CORE only. "
-                "Do NOT include coating ingredients. Typical labels: "
-                "'Non-medicinal ingredients', 'Core tablet', 'Tablet core', 'Inactive ingredients'."
-            ),
-            "excipients_coating": (
-                "Ingredients in the FILM COAT or COATING ONLY. "
-                "Only populate if there is an explicit 'Film coat', 'Film coating', or 'Coating:' subsection. "
-                "If no coating subsection exists, set found=false."
-            ),
-            "preservatives": (
-                "Preservative(s) specifically listed (e.g. benzalkonium chloride, methylparaben). "
-                "Return null if none are listed; set found=false if no preservative section."
-            ),
-        }
-    elif field_group == "appearance":
-        fields_desc = {
-            "colour": "Colour(s) of the tablet/capsule/product (e.g. 'white', 'light blue').",
-            "shape": "Shape (e.g. 'round', 'oval', 'oblong', 'biconvex'). Null if absent.",
-            "size_mm": "Dimensions in mm (e.g. '9.5 mm', '11 × 7 mm'). Null if absent.",
-            "weight": "Weight of the dosage unit in mg (e.g. '325 mg tablet weight'). Null if absent.",
-        }
-    elif field_group == "ph":
-        fields_desc = {
-            "ph": (
-                "Standalone pH value or range (e.g. '6.8', '4.5–7.0'). "
-                "If there is ONLY a pH-solubility table (no standalone pH property), "
-                "return the exact string 'Not stated (pH-dependent solubility only)'. "
-                "Return null if pH is not mentioned at all."
-            ),
-        }
-    else:
-        return {}
-
-    fields_json = json.dumps({k: v for k, v in fields_desc.items()}, indent=2)
-    prompt = (
-        f"Extract pharmaceutical data from this product monograph text (page {page_num}).\n\n"
-        f"Fields to extract:\n{fields_json}\n\n"
-        f"For each field return:\n"
-        f'  "value": exact verbatim text from the document, or null\n'
-        f'  "found": true if present, false if not found\n'
-        f'  "page": {page_num} if found, null if not\n\n'
-        f"RULES:\n"
-        f"- Copy values VERBATIM. Do NOT paraphrase, abbreviate, or invent.\n"
-        f"- If absent: value=null, found=false, page=null.\n"
-        f"- Return ONLY valid JSON — no prose, no markdown.\n\n"
-        f"TEXT (page {page_num}):\n"
-        f"{section_text[:5000]}\n\n"
-        f"JSON response:"
-    )
-
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "format": "json",
-                    "stream": False,
-                    "options": {"temperature": 0, "num_ctx": 8192},
-                },
-                timeout=120.0,
-            )
-        if r.status_code != 200:
-            logger.debug("Ollama returned %d for field_group=%s", r.status_code, field_group)
-            return {}
-        raw = r.json().get("response", "")
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.debug("Ollama response not valid JSON for %s: %s", field_group, exc)
-        return {}
-    except Exception as exc:
-        logger.debug("Ollama query failed for %s: %s", field_group, exc)
-        return {}
-
-
-# In-flight dedup for concurrent Ollama calls with identical section text.
-# Without this, N DINs sharing one PM would fire N simultaneous Ollama calls
-# for the same text, saturating the GPU and multiplying wall-clock N×.
-_OLLAMA_INFLIGHT: dict[str, "asyncio.Future[dict]"] = {}
-_OLLAMA_INFLIGHT_LOCK = asyncio.Lock()
-
-
-async def _query_ollama_cached(section_text: str, page_num: int, field_group: str) -> dict:
-    """_query_ollama with persistent cache + in-flight dedup keyed by section-text hash.
+async def _query_provider_cached(section_text: str, page_num: int, field_group: str) -> dict:
+    """Query configured LLM provider with persistent cache + in-flight dedup.
 
     Two-level dedup:
-    1. Persistent SQLite cache (cross-run): subsequent exports of same drug skip Ollama entirely.
-    2. In-flight asyncio Future (within-run): concurrent DINs sharing identical PM text wait
-       for the first caller's result instead of all firing Ollama simultaneously.
+    1. Persistent SQLite cache (cross-run, TTL 7 days).
+    2. In-flight asyncio Future (within-run): concurrent DINs sharing identical
+       PM text wait for the first caller's result.
 
-    TTL 7 days — PM text changes only on major label revisions.
+    With NullProvider (default), the provider returns {} instantly so this
+    function returns {} on every call — no network, no cache writes.
     """
+    provider = get_llm_provider()
     key = f"{field_group}:{hashlib.sha256(section_text[:5000].encode()).hexdigest()}"
 
-    # Level 1: persistent cache hit → instant return
-    cached = cache_get("ollama_result", key)
+    # Level 1: persistent cache hit
+    cached = cache_get("llm_result", key)
     if cached is not None:
         return cached
 
-    # Level 2: in-flight dedup — if another coroutine is already querying Ollama for this
-    # exact text, wait for its result rather than firing a duplicate request.
-    async with _OLLAMA_INFLIGHT_LOCK:
-        if key in _OLLAMA_INFLIGHT:
-            fut: asyncio.Future[dict] = _OLLAMA_INFLIGHT[key]
+    # Level 2: in-flight dedup
+    async with _LLM_INFLIGHT_LOCK:
+        if key in _LLM_INFLIGHT:
+            fut: asyncio.Future[dict] = _LLM_INFLIGHT[key]
             is_leader = False
         else:
             loop = asyncio.get_event_loop()
             fut = loop.create_future()
-            _OLLAMA_INFLIGHT[key] = fut
+            _LLM_INFLIGHT[key] = fut
             is_leader = True
 
     if not is_leader:
         return await asyncio.shield(fut)
 
     try:
-        result = await _query_ollama(section_text, page_num, field_group)
+        result = await provider.extract_appearance_fields(section_text, page_num, field_group)
         if result:
-            cache_set("ollama_result", key, result, ttl=60 * 60 * 24 * 7)
+            cache_set("llm_result", key, result, ttl=60 * 60 * 24 * 7)
         fut.set_result(result)
         return result
     except Exception as exc:
         fut.set_exception(exc)
         raise
     finally:
-        async with _OLLAMA_INFLIGHT_LOCK:
-            _OLLAMA_INFLIGHT.pop(key, None)
+        async with _LLM_INFLIGHT_LOCK:
+            _LLM_INFLIGHT.pop(key, None)
 
 
-def _apply_ollama_result(
+def _apply_provider_result(
     row: dict,
-    ollama_out: dict,
+    provider_out: dict,
     fields: list[str],
     fallback_page: Optional[int],
 ) -> None:
-    """Write Ollama results into row dict, honouring NOT_IN_PM sentinel."""
+    """Write provider extraction results into row dict, honouring NOT_IN_PM sentinel."""
     for field in fields:
-        if field not in ollama_out:
+        if field not in provider_out:
             continue
-        entry = ollama_out[field]
+        entry = provider_out[field]
         if not isinstance(entry, dict):
             continue
         val = entry.get("value")
@@ -1116,8 +1016,6 @@ _DESC_END = [r"[Cc]omposition", r"[Pp]ackaging", r"[Ss]torage", r"\n\n\n"]
 async def parse_labeling_fields_async(
     pages: list[tuple[int, str]],
     din_strength: Optional[str],
-    enable_llm: bool = True,
-    _ollama_precheck: Optional[bool] = None,
 ) -> dict:
     """Extract Stage 3 label fields from pre-extracted PDF pages.
 
@@ -1126,9 +1024,12 @@ async def parse_labeling_fields_async(
     Does NOT extract: active_ingredient, pack_size, pack_style
                       (those come from Stage 2 / DPD API).
 
-    Scanned / low-text PDFs are handled by the caller (_extract_text_with_ocr)
-    before this function is called. This function always attempts extraction
-    regardless of text density. needs_ocr is set by enrich_labeling().
+    Extraction strategy (per field group):
+      1. Ask configured LLM provider (no-op with NullProvider — the default).
+      2. If provider returns {}, use regex deterministic path.
+
+    cite-or-blank rule is enforced on both paths: only populate verbatim/cited
+    content; leave fields NOT_IN_PM when not found — never guess.
 
     Returns a flat dict. Every scalar field has a companion _page field.
     """
@@ -1146,45 +1047,20 @@ async def parse_labeling_fields_async(
     desc_page = desc_section[0] if desc_section else s6_page
     desc_text = desc_section[1] if desc_section else s6_text
 
-    if _ollama_precheck is not None:
-        use_ollama = enable_llm and _ollama_precheck
+    # ── Excipients ────────────────────────────────────────────────────────────
+    excip_section_text = s6_text
+    nm_match = re.search(
+        r"(?:Non-?[Mm]edicinal|[Ii]nactive|[Ee]xcipient)[^\n]{0,60}\n(.{50,}?)(?=\n\n|\Z)",
+        s6_text, re.DOTALL,
+    )
+    if nm_match:
+        excip_section_text = nm_match.group(0)
+
+    provider_excip = await _query_provider_cached(excip_section_text, s6_page or 1, "excipients")
+    if provider_excip:
+        _apply_provider_result(row, provider_excip, ["excipients_core", "excipients_coating", "preservatives"], s6_page)
     else:
-        use_ollama = enable_llm and await _is_ollama_available()
-
-    if use_ollama:
-        # --- Ollama path ---
-        excip_section_text = s6_text
-        nm_match = re.search(
-            r"(?:Non-?[Mm]edicinal|[Ii]nactive|[Ee]xcipient)[^\n]{0,60}\n(.{50,}?)(?=\n\n|\Z)",
-            s6_text, re.DOTALL,
-        )
-        if nm_match:
-            excip_section_text = nm_match.group(0)
-
-        ollama_a = await _query_ollama_cached(excip_section_text, s6_page or 1, "excipients")
-        _apply_ollama_result(row, ollama_a, ["excipients_core", "excipients_coating", "preservatives"], s6_page)
-
-        if din_strength and desc_text:
-            norm = _normalize_strength(din_strength)
-            ollama_b = await _query_ollama_cached(
-                f"Product: {norm}\n\n{desc_text}", desc_page or 1, "appearance"
-            )
-        else:
-            ollama_b = await _query_ollama_cached(desc_text or s6_text, desc_page or 1, "appearance")
-        _apply_ollama_result(row, ollama_b, ["colour", "shape", "size_mm", "weight"], desc_page)
-
-        if s13_text:
-            ollama_c = await _query_ollama_cached(s13_text, s13_page or 1, "ph")
-            _apply_ollama_result(row, ollama_c, ["ph"], s13_page)
-        else:
-            row["ph"] = NOT_IN_PM
-            row["ph_page"] = None
-
-    else:
-        # --- Regex fallback path ---
-        logger.info("Ollama offline — using regex fallback for Stage 3 extraction")
-
-        # active_ingredient: best-effort from §6 (Stage 2 DPD API overrides in enrich_labeling)
+        # Deterministic regex path (active by default with NullProvider)
         ai_pdf = _extract_active_ingredient_regex(s6_text)
         row["active_ingredient"] = ai_pdf if ai_pdf else NOT_IN_PM
         row["active_ingredient_page"] = s6_page if ai_pdf else None
@@ -1199,6 +1075,18 @@ async def parse_labeling_fields_async(
         row["preservatives"] = pres
         row["preservatives_page"] = s6_page if pres not in (NOT_IN_PM,) else None
 
+    # ── Appearance ────────────────────────────────────────────────────────────
+    if din_strength and desc_text:
+        norm = _normalize_strength(din_strength)
+        provider_app = await _query_provider_cached(
+            f"Product: {norm}\n\n{desc_text}", desc_page or 1, "appearance"
+        )
+    else:
+        provider_app = await _query_provider_cached(desc_text or s6_text, desc_page or 1, "appearance")
+
+    if provider_app:
+        _apply_provider_result(row, provider_app, ["colour", "shape", "size_mm", "weight"], desc_page)
+    else:
         if desc_text:
             norm_strength = _normalize_strength(din_strength) if din_strength else None
             app = _extract_appearance_regex(desc_text, norm_strength)
@@ -1210,11 +1098,20 @@ async def parse_labeling_fields_async(
             row[field] = val if val else NOT_IN_PM
             row[f"{field}_page"] = desc_page if val else None
 
-        row["ph"] = _extract_ph_regex(s13_text) if s13_text else NOT_IN_PM
-        row["ph_page"] = s13_page if row["ph"] not in (NOT_IN_PM, PH_SOLUBILITY_ONLY) else None
+    # ── pH ────────────────────────────────────────────────────────────────────
+    if s13_text:
+        provider_ph = await _query_provider_cached(s13_text, s13_page or 1, "ph")
+        if provider_ph:
+            _apply_provider_result(row, provider_ph, ["ph"], s13_page)
+        else:
+            row["ph"] = _extract_ph_regex(s13_text)
+            row["ph_page"] = s13_page if row["ph"] not in (NOT_IN_PM, PH_SOLUBILITY_ONLY) else None
+    else:
+        row["ph"] = NOT_IN_PM
+        row["ph_page"] = None
 
-        # pack_style: packaging description from §6 Packaging subsection
-        # (Stage 2 DPD API overrides in enrich_labeling when available)
+    # ── pack_style from PDF §6 (Stage 2 DPD API overrides in enrich_labeling) ─
+    if "pack_style" not in row:
         ps_pdf = _extract_pack_style_from_pdf(s6_text)
         row["pack_style"] = ps_pdf if ps_pdf else NOT_IN_PM
         row["pack_style_page"] = s6_page if ps_pdf else None
@@ -1228,7 +1125,7 @@ def parse_labeling_fields(
     pages: list[tuple[int, str]],
     din_strength: Optional[str],
 ) -> dict:
-    """Synchronous wrapper around parse_labeling_fields_async for backward compatibility.
+    """Synchronous wrapper around parse_labeling_fields_async.
 
     Must only be called from a non-async context; raises RuntimeError otherwise.
     """
@@ -1253,7 +1150,6 @@ async def enrich_labeling(
     strength: Optional[str],
     pdf_bytes: Optional[bytes] = None,
     enable_ocr: Optional[bool] = None,
-    enable_llm: bool = True,
 ) -> Optional[dict]:
     """Enrich a single DIN: Stage 2 (DPD API) then Stage 3 (PDF + OCR if needed).
 
@@ -1305,7 +1201,7 @@ async def enrich_labeling(
         logger.warning("PDF parse failed for din=%s: %s", din, exc)
         return None
 
-    pdf_row = await parse_labeling_fields_async(pages, strength, enable_llm=enable_llm)
+    pdf_row = await parse_labeling_fields_async(pages, strength)
 
     # Mark OCR usage
     if ocr_used:
@@ -1336,11 +1232,10 @@ async def enrich_labeling(
 async def enrich_labeling_batch(
     din_map: dict[str, tuple[int, Optional[str]]],
     enable_ocr: Optional[bool] = None,
-    enable_llm: bool = True,
 ) -> dict[str, Optional[dict]]:
     """Enrich labeling for multiple DINs. din_map: {din → (drug_code, strength)}"""
     results = await asyncio.gather(*[
-        enrich_labeling(din, drug_code, strength, enable_ocr=enable_ocr, enable_llm=enable_llm)
+        enrich_labeling(din, drug_code, strength, enable_ocr=enable_ocr)
         for din, (drug_code, strength) in din_map.items()
     ])
     return dict(zip(din_map.keys(), results))
@@ -1391,7 +1286,6 @@ async def _extract_text_async(
 async def enrich_labeling_batch_fast(
     din_map: dict[str, tuple[int, Optional[str]]],
     enable_ocr: Optional[bool] = None,
-    enable_llm: bool = True,
     concurrency: int = 8,
     on_progress: Optional[Callable] = None,
 ) -> dict[str, Optional[dict]]:
@@ -1439,10 +1333,6 @@ async def enrich_labeling_batch_fast(
     for din, (drug_code, strength) in din_map.items():
         pdf_url = stage2_by_dc.get(drug_code, {}).get("pdf_url")
         pdf_url_groups.setdefault(pdf_url, []).append((din, drug_code, strength))
-
-    # Check Ollama availability once for the entire batch (avoid N concurrent
-    # GET /api/tags pings; one result is consistent for all DINs in this run).
-    use_llm = enable_llm and await _is_ollama_available()
 
     # ── Step 3: bounded concurrent processing, one task per unique pdf_url ────
     pdf_sem = asyncio.Semaphore(concurrency)
@@ -1506,13 +1396,10 @@ async def enrich_labeling_batch_fast(
                 await _tick_progress(din)
             return
 
-        # parse_labeling_fields_async is async (Ollama queries) but fast (regex
-        # fallback) — run all DINs in this group concurrently.
+        # Run all DINs in this group concurrently (each needs its own strength).
         async def _parse_one(din: str, drug_code: int, strength: Optional[str]) -> None:
             s2 = _stage2_fields_only(stage2_by_dc.get(drug_code, {}))
-            pdf_row = await parse_labeling_fields_async(
-                pages, strength, enable_llm=use_llm, _ollama_precheck=use_llm,
-            )
+            pdf_row = await parse_labeling_fields_async(pages, strength)
             if ocr_used:
                 pdf_row["needs_ocr"] = 1
                 logger.info("din=%s: OCR was used for at least one page → needs_ocr=1", din)

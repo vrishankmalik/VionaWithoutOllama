@@ -2,7 +2,8 @@
 
 Targets the branches left uncovered by tiers 1–7:
   - DPD brand / company search paths
-  - normalize.py async functions (Ollama mocked)
+  - normalize.py async functions (NullProvider default)
+  - LLM provider interface (NullProvider, provider selection)
   - cache_clear
   - GSUR / PR edge branches
 """
@@ -120,34 +121,22 @@ async def test_dpd_din_search_list_response(no_cache, monkeypatch):
 
 # ── normalize.py async paths ──────────────────────────────────────────────────
 
-async def test_normalize_ingredient_with_ollama_offline():
-    """normalize_ingredient runs without Ollama (falls back to static map only)."""
-    # Ollama is not running in test env; the function must gracefully return.
-    canonical, extras = await normalize_ingredient("acetaminophen")
-    assert canonical == "acetaminophen"
-    # Static synonyms should be included even without Ollama.
-    assert "paracetamol" in extras or len(extras) >= 0  # graceful fallback is OK
-
-
-async def test_normalize_ingredient_static_only(monkeypatch):
-    """When Ollama returns an error, extras come from the static map only."""
-    async def _fail(*a, **k):
-        return []
-    import app.normalize as norm_mod
-    monkeypatch.setattr(norm_mod, "_ollama_synonyms", _fail)
-
+async def test_normalize_ingredient_with_null_provider():
+    """normalize_ingredient works with NullProvider (static map only, no network)."""
     canonical, extras = await normalize_ingredient("acetaminophen")
     assert canonical == "acetaminophen"
     assert "paracetamol" in extras
 
 
-async def test_normalize_query_ingredient_field(monkeypatch):
-    """normalize_query for ingredient field returns synonyms."""
-    async def _noop_ollama(*a, **k):
-        return []
-    import app.normalize as norm_mod
-    monkeypatch.setattr(norm_mod, "_ollama_synonyms", _noop_ollama)
+async def test_normalize_ingredient_static_only():
+    """NullProvider returns [] for expand_synonyms; only static map contributes."""
+    canonical, extras = await normalize_ingredient("acetaminophen")
+    assert canonical == "acetaminophen"
+    assert "paracetamol" in extras
 
+
+async def test_normalize_query_ingredient_field():
+    """normalize_query for ingredient field returns synonyms from static map."""
     q, extras = await normalize_query("acetaminophen", field="ingredient")
     assert q == "acetaminophen"
     assert "paracetamol" in extras
@@ -161,41 +150,90 @@ async def test_normalize_query_non_ingredient_field():
         assert extras == []
 
 
-async def test_ollama_synonyms_mocked(monkeypatch):
-    """_ollama_synonyms returns parsed list when Ollama responds correctly."""
+async def test_llm_provider_expand_synonyms_with_fake_provider():
+    """A fake provider returning synonyms is used over the NullProvider."""
+    import os
+    from app.llm.provider import reset_provider_cache, NullProvider, LLMProvider
     import app.normalize as norm_mod
 
-    class _FakeResponse:
-        def raise_for_status(self): pass
-        def json(self): return {"response": '["paracetamol", "tylenol"]'}
+    class FakeProvider:
+        async def expand_synonyms(self, name: str) -> list[str]:
+            return ["fake_synonym_for_" + name]
+        async def summarize_results(self, q, s): return None
+        async def extract_appearance_fields(self, t, p, g): return {}
+        async def confirm_innovative_drug_match(self, i, c, sl): return None
 
-    class _FakeClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): pass
-        async def post(self, *a, **k): return _FakeResponse()
+    original_fn = norm_mod.get_llm_provider
+    norm_mod.get_llm_provider = lambda: FakeProvider()
+    try:
+        from app.cache import cache_get, cache_set
+        import app.cache as cache_mod
+        # Bypass cache so we actually call the provider
+        orig_get = cache_mod.cache_get
+        cache_mod.cache_get = lambda *a, **k: None
+        canonical, extras = await normalize_ingredient("testdrug")
+        assert "fake_synonym_for_testdrug" in extras
+    finally:
+        norm_mod.get_llm_provider = original_fn
+        cache_mod.cache_get = orig_get
+        reset_provider_cache()
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: _FakeClient())
-    result = await norm_mod._ollama_synonyms("acetaminophen")
-    assert "paracetamol" in result
-    assert "tylenol" in result
+
+async def test_null_provider_returns_empty_everywhere():
+    """NullProvider: every method returns the no-result sentinel."""
+    from app.llm.provider import NullProvider
+    p = NullProvider()
+    assert await p.expand_synonyms("ibuprofen") == []
+    assert await p.summarize_results("q", []) is None
+    assert await p.extract_appearance_fields("text", 1, "appearance") == {}
+    assert await p.confirm_innovative_drug_match("ing", "co", []) is None
 
 
-async def test_ollama_synonyms_returns_empty_on_bad_json(monkeypatch):
-    """_ollama_synonyms returns [] when Ollama response has no JSON array."""
-    import app.normalize as norm_mod
+def test_get_llm_provider_returns_null_by_default():
+    """LLM_PROVIDER not set → NullProvider."""
+    import os
+    from app.llm.provider import get_llm_provider, reset_provider_cache, NullProvider
+    reset_provider_cache()
+    os.environ.pop("LLM_PROVIDER", None)
+    provider = get_llm_provider()
+    assert isinstance(provider, NullProvider)
+    reset_provider_cache()
 
-    class _FakeResponse:
-        def raise_for_status(self): pass
-        def json(self): return {"response": "I don't know about that drug."}
 
-    class _FakeClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): pass
-        async def post(self, *a, **k): return _FakeResponse()
+def test_get_llm_provider_null_explicit():
+    """LLM_PROVIDER=none → NullProvider."""
+    import os
+    from app.llm.provider import get_llm_provider, reset_provider_cache, NullProvider
+    os.environ["LLM_PROVIDER"] = "none"
+    reset_provider_cache()
+    provider = get_llm_provider()
+    assert isinstance(provider, NullProvider)
+    del os.environ["LLM_PROVIDER"]
+    reset_provider_cache()
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: _FakeClient())
-    result = await norm_mod._ollama_synonyms("unknowndrug")
-    assert result == []
+
+def test_get_llm_provider_unknown_falls_back_to_null():
+    """Unknown LLM_PROVIDER value → NullProvider with a warning (no crash)."""
+    import os
+    from app.llm.provider import get_llm_provider, reset_provider_cache, NullProvider
+    os.environ["LLM_PROVIDER"] = "unicorn_ai"
+    reset_provider_cache()
+    provider = get_llm_provider()
+    assert isinstance(provider, NullProvider)
+    del os.environ["LLM_PROVIDER"]
+    reset_provider_cache()
+
+
+def test_get_llm_provider_azure_returns_azure():
+    """LLM_PROVIDER=azure_openai → AzureOpenAIProvider (no creds needed to instantiate)."""
+    import os
+    from app.llm.provider import get_llm_provider, reset_provider_cache, AzureOpenAIProvider
+    os.environ["LLM_PROVIDER"] = "azure_openai"
+    reset_provider_cache()
+    provider = get_llm_provider()
+    assert isinstance(provider, AzureOpenAIProvider)
+    del os.environ["LLM_PROVIDER"]
+    reset_provider_cache()
 
 
 # ── cache_clear ───────────────────────────────────────────────────────────────

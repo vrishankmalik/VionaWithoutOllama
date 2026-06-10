@@ -1,12 +1,11 @@
-"""Tests for app/enrichment/data_protection.py (Change 3).
+"""Tests for app/enrichment/data_protection.py.
 
 Covers:
   - Ingredient and manufacturer normalisation
-  - Deterministic matching (exact + fuzzy)
+  - Deterministic matching (exact + fuzzy) — the active path with NullProvider
   - _extract_dp_fields (pediatric_extension → Yes/No; N/A → No)
-  - Offline fallback: Ollama unavailable → deterministic path used
   - No match → empty dict (no fabrication)
-  - Async match_data_protection with mocked Ollama online/offline
+  - Async match_data_protection: deterministic path used by default
   - Regression: empty parse result not cached (Bug 1)
   - Round-trip canary: parsed rows feed back through matcher correctly
 """
@@ -162,14 +161,9 @@ def test_deterministic_fuzzy_manufacturer_fallback():
 # ── Async match_data_protection — offline fallback ───────────────────────────
 
 @pytest.mark.asyncio
-async def test_match_data_protection_offline_uses_deterministic(monkeypatch):
-    """When Ollama is offline, match_data_protection falls back to deterministic path."""
+async def test_match_data_protection_uses_deterministic_by_default():
+    """With NullProvider (default), match_data_protection uses deterministic path."""
     from app.enrichment import data_protection as dp_mod
-
-    async def _offline() -> bool:
-        return False
-
-    monkeypatch.setattr(dp_mod, "_is_ollama_available", _offline)
 
     result = await dp_mod.match_data_protection(
         "eculizumab 10 mg/mL",
@@ -181,14 +175,9 @@ async def test_match_data_protection_offline_uses_deterministic(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_match_data_protection_no_match_returns_empty(monkeypatch):
+async def test_match_data_protection_no_match_returns_empty():
     """Generics / different manufacturer → empty dict, never fabricated."""
     from app.enrichment import data_protection as dp_mod
-
-    async def _offline() -> bool:
-        return False
-
-    monkeypatch.setattr(dp_mod, "_is_ollama_available", _offline)
 
     result = await dp_mod.match_data_protection(
         "metformin hydrochloride 500 mg",
@@ -199,13 +188,9 @@ async def test_match_data_protection_no_match_returns_empty(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_match_data_protection_empty_table_returns_empty(monkeypatch):
+async def test_match_data_protection_empty_table_returns_empty():
     from app.enrichment import data_protection as dp_mod
 
-    async def _offline() -> bool:
-        return False
-
-    monkeypatch.setattr(dp_mod, "_is_ollama_available", _offline)
     result = await dp_mod.match_data_protection("alpelisib", "Novartis", [])
     assert result == {}
 

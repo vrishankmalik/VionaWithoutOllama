@@ -66,7 +66,6 @@ async def run_export_job(
     job: JobState,
     allow_partial: bool,
     enable_ocr: bool,
-    enable_llm: bool,
 ) -> None:
     """Run the full export pipeline in the background, emitting progress events."""
     t0 = time.time()
@@ -232,7 +231,6 @@ async def run_export_job(
                 f"({label_cache_hits} store cache hits, "
                 f"{unique_drug_codes_count} unique drug codes); "
                 f"ocr={'on' if enable_ocr else 'off'}, "
-                f"llm={'on' if enable_llm else 'off'}, "
                 f"concurrency={_LABEL_SEM_SIZE}"
             ),
         })
@@ -251,7 +249,6 @@ async def run_export_job(
             await enrich_labeling_batch_fast(
                 din_map,
                 enable_ocr=enable_ocr,
-                enable_llm=enable_llm,
                 concurrency=_LABEL_SEM_SIZE,
                 on_progress=_on_label_progress,
             )

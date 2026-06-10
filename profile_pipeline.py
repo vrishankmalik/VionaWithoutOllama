@@ -106,19 +106,6 @@ _patents_mod.cache_set = _patched_cache_set
 _labeling_mod.cache_get = _patched_cache_get
 _labeling_mod.cache_set = _patched_cache_set
 
-# ── Patch _is_ollama_available to count calls ─────────────────────────────────
-_orig_ollama_check = _labeling_mod._is_ollama_available
-
-
-async def _patched_ollama_check() -> bool:
-    async with _AsyncTimer("ollama_available_check"):
-        result = await _orig_ollama_check()
-    _call_counts[f"ollama_available_check:{'available' if result else 'unavailable'}"] += 1
-    return result
-
-
-_labeling_mod._is_ollama_available = _patched_ollama_check
-
 # ── Patch key pipeline functions ──────────────────────────────────────────────
 _orig_fetch_cpd = _patents_mod._fetch_cpd_dates
 
@@ -183,33 +170,33 @@ _labeling_mod._extract_text_async = _patched_extract_text
 _orig_parse_fields = _labeling_mod.parse_labeling_fields_async
 
 
-async def _patched_parse_fields(pages, din_strength, enable_llm=True, **kwargs):
+async def _patched_parse_fields(pages, din_strength, **kwargs):
     async with _AsyncTimer("parse_labeling_fields"):
-        return await _orig_parse_fields(pages, din_strength, enable_llm, **kwargs)
+        return await _orig_parse_fields(pages, din_strength, **kwargs)
 
 
 _labeling_mod.parse_labeling_fields_async = _patched_parse_fields
 
-_orig_query_ollama = _labeling_mod._query_ollama
-_ollama_text_hashes: dict[str, set] = defaultdict(set)  # field_group -> set of unique text hashes
+_orig_query_provider = _labeling_mod._query_provider_cached
+_provider_text_hashes: dict[str, set] = defaultdict(set)  # field_group -> set of unique text hashes
 
 
-async def _patched_query_ollama(section_text, page_num, field_group):
+async def _patched_query_provider(section_text, page_num, field_group):
     import hashlib
-    _ollama_text_hashes[field_group].add(hashlib.sha256(section_text[:5000].encode()).hexdigest())
-    async with _AsyncTimer(f"ollama_query:{field_group}"):
-        return await _orig_query_ollama(section_text, page_num, field_group)
+    _provider_text_hashes[field_group].add(hashlib.sha256(section_text[:5000].encode()).hexdigest())
+    async with _AsyncTimer(f"llm_query:{field_group}"):
+        return await _orig_query_provider(section_text, page_num, field_group)
 
 
-_labeling_mod._query_ollama = _patched_query_ollama
+_labeling_mod._query_provider_cached = _patched_query_provider
 
 # Patch enrich_labeling_batch_fast to time it holistically
 _orig_batch_fast = _labeling_mod.enrich_labeling_batch_fast
 
 
-async def _patched_batch_fast(din_map, enable_ocr=None, enable_llm=True, concurrency=8, on_progress=None):
+async def _patched_batch_fast(din_map, enable_ocr=None, concurrency=8, on_progress=None):
     async with _AsyncTimer("labeling_batch_fast_total"):
-        return await _orig_batch_fast(din_map, enable_ocr, enable_llm, concurrency, on_progress)
+        return await _orig_batch_fast(din_map, enable_ocr, concurrency, on_progress)
 
 
 _labeling_mod.enrich_labeling_batch_fast = _patched_batch_fast
@@ -248,11 +235,8 @@ _export_job_mod.enrich_labeling_batch_fast = _patched_batch_fast
 _export_job_mod.enrich_patents = _patched_enrich_patents
 _export_job_mod.fetch_data_protection_table = _patched_dp_fetch
 
-# Also patch labeling functions called inside labeling.py via module globals
-# (these DO work with module-attribute patching since they're in the same module,
-#  but we set them explicitly for clarity)
-_labeling_mod._query_ollama = _patched_query_ollama
-_labeling_mod._is_ollama_available = _patched_ollama_check
+# Patch labeling module globals for instrumentation
+_labeling_mod._query_provider_cached = _patched_query_provider
 _labeling_mod._download_pdf = _patched_download_pdf
 _labeling_mod._extract_text_async = _patched_extract_text
 
@@ -297,11 +281,11 @@ def _print_report(total_elapsed: float) -> None:
 
     print("\n-- Ollama --")
     for k in sorted(_call_counts):
-        if "ollama" in k.lower():
+        if "llm" in k.lower():
             print(f"  {k:<60} {_call_counts[k]:>6}")
-    print("  Unique Ollama input texts (dedup potential):")
-    for group, hashes in sorted(_ollama_text_hashes.items()):
-        calls = len(_timings.get(f"ollama_query:{group}", []))
+    print("  Unique LLM input texts (dedup potential):")
+    for group, hashes in sorted(_provider_text_hashes.items()):
+        calls = len(_timings.get(f"llm_query:{group}", []))
         print(f"    {group:<20}  total_calls={calls}  unique_texts={len(hashes)}  "
               f"redundant={max(0, calls - len(hashes))}")
 
@@ -311,8 +295,8 @@ def _print_report(total_elapsed: float) -> None:
 
     print("\n-- Concurrency check (were operations actually parallel?) --")
     for name in ("stage2_fetch", "pdf_download", "pdf_text_extraction", "cpd_fetch",
-                 "pr_detail_fallback", "parse_labeling_fields", "ollama_query:excipients",
-                 "ollama_query:appearance", "ollama_query:ph",
+                 "pr_detail_fallback", "parse_labeling_fields", "llm_query:excipients",
+                 "llm_query:appearance", "llm_query:ph",
                  "labeling_batch_fast_total", "patents_total"):
         if name in _timings:
             peak = _peak_in_flight.get(name, "?")
@@ -335,7 +319,7 @@ async def _run(query: str, field: str) -> None:
     print("All stages will run (patents, labeling, data-protection, workbook).\n")
 
     t0 = time.perf_counter()
-    await run_export_job(job, allow_partial=True, enable_ocr=False, enable_llm=True)
+    await run_export_job(job, allow_partial=True, enable_ocr=False)
     total = time.perf_counter() - t0
 
     print(f"\nJob status: {job.status}")

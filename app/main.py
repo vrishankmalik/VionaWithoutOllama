@@ -161,7 +161,6 @@ class ExportStartRequest(BaseModel):
     field: str = "ingredient"
     allow_partial: bool = False
     enable_ocr: bool = True
-    enable_llm: bool = True
 
 
 @app.post("/export/start")
@@ -170,7 +169,7 @@ async def export_start(req: ExportStartRequest) -> dict:
     job_id = uuid.uuid4().hex
     job = create_job(job_id, req.q.strip(), req.field)
     asyncio.create_task(
-        run_export_job(job, req.allow_partial, req.enable_ocr, req.enable_llm)
+        run_export_job(job, req.allow_partial, req.enable_ocr)
     )
     return {"job_id": job_id}
 
@@ -408,17 +407,14 @@ _HTML_UI = """<!DOCTYPE html>
         </select>
       </div>
       <div class="field-group" style="justify-content:flex-end">
-        <label class="checkbox-label">
-          <input type="checkbox" id="summary"/> AI Summary (requires Ollama)
+        <label class="checkbox-label" title="AI summaries require LLM_PROVIDER to be configured (disabled by default)">
+          <input type="checkbox" id="summary"/> AI Summary (requires LLM provider)
         </label>
       </div>
       <div class="field-group" style="justify-content:flex-end; gap:6px">
         <div style="display:flex; gap:10px; align-items:center; margin-bottom:4px;">
           <label class="checkbox-label" title="Run OCR on scanned product monograph PDFs">
             <input type="checkbox" id="enableOcr" checked/> OCR
-          </label>
-          <label class="checkbox-label" title="Use Ollama LLM for PDF field extraction">
-            <input type="checkbox" id="enableLlm" checked/> LLM
           </label>
         </div>
         <div style="display:flex; gap:8px;">
@@ -766,7 +762,6 @@ async function doExport() {
   if (!q) return;
 
   const enableOcr = document.getElementById('enableOcr').checked;
-  const enableLlm = document.getElementById('enableLlm').checked;
 
   // Disable export button, show panel
   document.getElementById('exportBtn').disabled = true;
@@ -786,7 +781,7 @@ async function doExport() {
     const resp = await fetch('/export/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q, field, allow_partial: false, enable_ocr: enableOcr, enable_llm: enableLlm }),
+      body: JSON.stringify({ q, field, allow_partial: false, enable_ocr: enableOcr }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));

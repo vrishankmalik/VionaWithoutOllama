@@ -5,9 +5,9 @@ COMBINATION_SEPARATOR = " + "
 # Salt-form normalization (default off — keeps "DIPHENHYDRAMINE HCL" as-is)
 NORMALIZE_SALT_FORMS = bool(int(os.getenv("NORMALIZE_SALT_FORMS", "0")))
 
-# LLM
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+# LLM provider — see app/llm/provider.py
+# LLM_PROVIDER = none (default) | azure_openai
+# No localhost dependency; all optional config via env vars.
 
 # Concurrency / timeouts
 DPD_SEMAPHORE = int(os.getenv("DPD_SEMAPHORE", "10"))

@@ -38,7 +38,6 @@ async def test_async_export_matches_sync_for_alpelisib(tmp_path) -> None:
                 "q": "alpelisib",
                 "field": "ingredient",
                 "enable_ocr": False,
-                "enable_llm": False,
             },
         )
         assert start.status_code == 200, start.text

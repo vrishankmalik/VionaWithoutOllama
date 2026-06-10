@@ -140,24 +140,20 @@ def _pr_post_side_effect(request: httpx.Request) -> httpx.Response:
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
-def _mock_ollama_offline(monkeypatch):
-    """Offline test guard: make _is_ollama_available() return False instantly.
+def _ensure_null_provider():
+    """Ensure NullProvider is active during every test.
 
-    Without this, every call to parse_labeling_fields() blocks 30 s waiting for
-    httpx DNS resolution of localhost:11434 to time out on this machine.
-    Golden tests (TestPiqrayGolden) exercise the regex fallback path, which is
-    the offline behavior we actually want to test.
+    This is the default (LLM_PROVIDER=none / unset), but we reset the singleton
+    cache between tests so that any test that sets LLM_PROVIDER in the env does
+    not leak into the next test.
     """
     try:
-        import asyncio as _asyncio
-        import app.enrichment.labeling as _lab
-
-        async def _offline() -> bool:
-            return False
-
-        monkeypatch.setattr(_lab, "_is_ollama_available", _offline)
+        from app.llm.provider import reset_provider_cache
+        reset_provider_cache()
+        yield
+        reset_provider_cache()
     except ImportError:
-        pass  # labeling module not imported yet — nothing to patch
+        yield
 
 
 @pytest.fixture

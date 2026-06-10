@@ -1,18 +1,15 @@
 """
 Ingredient name normalization and synonym expansion.
-Uses a static map as the primary/fallback, with optional llama3 via Ollama
-for more nuanced synonym expansion when Ollama is running.
+
+Primary path: static synonym map (always active, no network required).
+Optional add-on: configured LLM provider via app/llm/provider.py.
+  - NullProvider (default): only static map is used.
+  - AzureOpenAIProvider: extends static results with LLM expansions.
 """
 from __future__ import annotations
 
-import json
-import re
-from typing import Optional
-
-import httpx
-
 from app.cache import cache_get, cache_set
-from app.config import CACHE_TTL, OLLAMA_BASE_URL, OLLAMA_MODEL
+from app.llm.provider import get_llm_provider
 
 # Static synonym map — canonical form → list of synonyms (and vice versa)
 _STATIC_SYNONYMS: dict[str, list[str]] = {
@@ -98,58 +95,33 @@ def _static_synonyms(term: str) -> list[str]:
     return _STATIC_SYNONYMS.get(key, [])
 
 
-async def _ollama_synonyms(term: str) -> list[str]:
-    """Ask llama3 for synonym/salt-form expansions. Returns [] on any failure."""
-    prompt = (
-        f"List all common synonyms, salt forms, and brand names for the drug ingredient "
-        f"'{term}'. Return ONLY a JSON array of strings, nothing else. Example: "
-        f'["synonym1", "salt form", "brand name"]. If none, return [].'
-    )
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-                timeout=15.0,
-            )
-            r.raise_for_status()
-            data = r.json()
-            text = data.get("response", "").strip()
-            # Extract JSON array from response
-            m = re.search(r"\[.*?\]", text, re.DOTALL)
-            if m:
-                candidates = json.loads(m.group(0))
-                return [c.strip() for c in candidates if isinstance(c, str) and c.strip()]
-    except Exception:
-        pass
-    return []
-
-
 async def normalize_ingredient(term: str) -> tuple[str, list[str]]:
     """
     Return (canonical_term, list_of_extra_search_terms).
     canonical_term is what we searched for (unchanged unless we detect a known synonym).
     extra_terms are additional terms to search for in parallel.
+
+    Static map always runs. LLM provider expansion is an optional add-on:
+    with NullProvider (the default) only the static map is used.
     """
     term = term.strip()
     key = term.lower()
 
-    # Fast path: if we have a cached synonym list (including any Ollama results from a
-    # prior run), return immediately — avoids a 10-15s Ollama round-trip on every export.
+    # Fast path: cached synonym list from a prior run
     cached = cache_get("normalize_synonyms", key)
     if cached is not None:
         return term, cached
 
-    # 1. Check static map
+    # 1. Static map (always active)
     static = _static_synonyms(key)
 
-    # 2. Try Ollama (fire and forget — if it fails, use static only)
-    ollama_terms = await _ollama_synonyms(term)
+    # 2. Optional LLM provider expansion (no-op with NullProvider)
+    provider = get_llm_provider()
+    llm_terms = await provider.expand_synonyms(term)
 
     # Combine and deduplicate
-    all_extras = list({t.lower() for t in (static + ollama_terms)} - {key})
+    all_extras = list({t.lower() for t in (static + llm_terms)} - {key})
 
-    # Cache for the standard TTL.  An empty list is also valid (no synonyms found).
     cache_set("normalize_synonyms", key, all_extras)
     return term, all_extras
 

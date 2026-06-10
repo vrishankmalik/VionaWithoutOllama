@@ -1,15 +1,15 @@
-"""Verify that optimised export caching (Ollama result cache + enrichment DB) produces
+"""Verify that optimised export caching (LLM result cache + enrichment DB) produces
 byte-for-byte identical workbook output on repeated runs of the same query.
 
 Strategy:
-  Run 1 (warm — enrichment DB and Ollama results already populated by earlier test runs or
-          by the app's normal operation): capture all cell values.
+  Run 1 (warm — enrichment DB populated by earlier test runs or app's normal operation):
+         capture all cell values.
   Run 2 (repeat, same conditions): capture all cell values again.
   Assert Run 1 == Run 2 on every cell of both sheets.
 
-This test does NOT do a full live export (too slow / requires Ollama).  Instead it exercises
-the workbook assembly path in isolation, using enrichment-store data that was already written
-by previous runs.  If the enrichment store is empty the test is skipped gracefully.
+This test does NOT do a full live export (too slow).  Instead it exercises the workbook
+assembly path in isolation, using enrichment-store data that was already written by previous
+runs.  If the enrichment store is empty the test is skipped gracefully.
 
 Why two runs?  The first call to build_workbook reads from the enrichment store; the second
 call reads the same store (no new enrichment).  Any non-determinism (random ordering, date
@@ -101,15 +101,15 @@ def test_repeated_workbook_build_is_identical() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ollama_cache_hit_produces_same_result_as_live_call(tmp_path) -> None:
-    """_query_ollama_cached returns the same dict whether from cache or live Ollama.
+async def test_provider_cache_hit_produces_same_result_as_live_call(tmp_path) -> None:
+    """_query_provider_cached returns the cached value and does NOT call the provider.
 
     Uses a patch to intercept cache_get and verify: if the cache returns a value,
-    the function returns it without calling _query_ollama.  Verifies no mutation
+    the function returns it without calling the provider.  Verifies no mutation
     between store and return.
     """
-    from unittest.mock import AsyncMock, patch
-    from app.enrichment.labeling import _query_ollama_cached
+    from unittest.mock import patch
+    from app.enrichment.labeling import _query_provider_cached
 
     fake_result = {
         "excipients_core": {"value": "microcrystalline cellulose", "found": True, "page": 42},
@@ -117,10 +117,20 @@ async def test_ollama_cache_hit_produces_same_result_as_live_call(tmp_path) -> N
         "preservatives": {"value": None, "found": False, "page": None},
     }
 
+    provider_called = []
+
+    class _RecordingProvider:
+        async def extract_appearance_fields(self, text, page, group):
+            provider_called.append(group)
+            return {}
+        async def expand_synonyms(self, n): return []
+        async def summarize_results(self, q, s): return None
+        async def confirm_innovative_drug_match(self, i, c, sl): return None
+
     with patch("app.enrichment.labeling.cache_get", return_value=fake_result) as mock_cg, \
-         patch("app.enrichment.labeling._query_ollama") as mock_ollama:
-        result = await _query_ollama_cached("some text", 6, "excipients")
+         patch("app.enrichment.labeling.get_llm_provider", return_value=_RecordingProvider()):
+        result = await _query_provider_cached("some text", 6, "excipients")
 
     assert result == fake_result, "Cache hit must return exactly the cached value"
-    mock_ollama.assert_not_called()
+    assert provider_called == [], "Provider must NOT be called on cache hit"
     mock_cg.assert_called_once()
