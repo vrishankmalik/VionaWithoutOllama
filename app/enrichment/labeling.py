@@ -603,11 +603,12 @@ def _extract_text_with_ocr(
             # cleanly inside the §6 section text.
             nm_from_table = _extract_nm_from_table_column(page)
             if nm_from_table:
-                raw_text = _NM_HEADING_RE.sub(
-                    f"Non-Medicinal Ingredients: {nm_from_table}",
-                    raw_text,
-                    count=1,
-                )
+                # Append (not prepend) a clean NM heading line so that _find_section can
+                # collect it as part of §6 text.  Prepending would put the NM line BEFORE
+                # the §6 start marker when both are on the same page, causing _find_section
+                # to start from the marker and skip the prepended NM entirely.
+                # Appending ensures the NM line is always inside whatever section is active.
+                raw_text = raw_text + f"\nNon-Medicinal Ingredients: {nm_from_table}"
             used_ocr = False
 
             if len(raw_text) < _MIN_TEXT_CHARS and enable_ocr:
@@ -794,15 +795,34 @@ def _apply_provider_result(
 # ── Stage 3: regex fallback ───────────────────────────────────────────────────
 
 _COLOR_WORDS = (
-    r"(?:light |pale |dark |bright |deep |off-?)?(?:white|red|pink|orange|yellow|green|"
-    r"blue|purple|violet|brown|beige|grey|gray|black|cream|tan|teal|maroon|ivory)"
+    r"(?:light |pale |dark |bright |deep |off[-\s]?)?(?:white|red|pink|orange|amber|yellow|gold(?:en)?|green|"
+    r"blue|purple|violet|brown|beige|grey|gray|black|tan|teal|maroon|ivory|"
+    r"peach|coral|lavender|lilac|rose|silver|salmon|olive|turquoise|aqua|indigo)\b"
 )
 _SHAPE_WORDS = (
-    r"(?:round|oval(?:oid)?|oblong|capsule[- ]?shaped|caplet|biconvex|"
-    r"pentagonal|hexagonal|octagonal|triangular|diamond|shield|kidney)"
+    r"\b(?:round|oval(?:oid)?|oblong|capsule[- ]?shaped|caplet|biconvex|"
+    r"pentagonal|hexagonal|octagonal|triangular|diamond|shield|kidney[-\s]shaped)\b"
 )
 _SIZE_PAT = r"(\d+(?:\.\d+)?\s*mm(?:\s*[×xX]\s*\d+(?:\.\d+)?\s*mm)?)"
-_WEIGHT_PAT = r"(\d+(?:\.\d+)?\s*mg\s*(?:tablet\s+weight|weight\s+of\s+tablet|per\s+tablet)?)"
+_WEIGHT_PAT = (
+    r"(?:[Tt]ablet\s+[Ww]eight|[Ww]eight\s+of\s+(?:the\s+)?[Tt]ablet|[Tt]otal\s+[Tt]ablet\s+[Ww]eight)"
+    r"\s*[:\-]?\s*(\d+(?:\.\d+)?\s*mg)"
+)
+
+# Color is only valid when it appears near a dosage-form or appearance vocabulary word.
+# This prevents false matches from "white bottle", "white paper", "printed on white", etc.
+# Covers: solid oral (tablet/capsule/caplet), topical (gel/cream/ointment/lotion/emulsion),
+# parenteral (injection/ampoule/vial), liquids (syrup/suspension/solution/drops),
+# and generic descriptors (appearance/description/each/supplied).
+_APPEARANCE_CONTEXT = re.compile(
+    r"\b(?:tablets?|capsules?|caplets?|gelatin|softgels?|films?|coated|pellets?|granules?|"
+    r"lozenges?|suppositories?|injections?|infusions?|ampoules?|vials?|syrups?|"
+    r"suspensions?|solutions?|drops|creams?|gels?|ointments?|lotions?|emulsions?|"
+    r"pastes?|patches?|inserts?|sprays?|aerosols?|"
+    r"topical|ophthalmic|nasal|transdermal|"
+    r"each|appearance|description|supplied|colou?rs?)\b",
+    re.IGNORECASE,
+)
 
 _POISON_PATTERNS = re.compile(
     r"administration\s+strength|strength\s+and\s+dosage|recommended\s+dose|"
@@ -892,24 +912,104 @@ _PACK_STYLE_HEADING_REJECT = re.compile(
 # A captured block is also rejected when any line ends with ":" (heading fragment)
 _TRAILING_COLON_RE = re.compile(r":\s*$", re.MULTILINE)
 
+# ── General packaging sentence scanner ───────────────────────────────────────
+# Instead of enumerating every possible packaging section format, we scan the
+# text for sentences that LOOK like packaging info:
+#   - contains a container keyword (bottles, vials, blisters, strips, …)
+#   - contains a quantity number that is NOT a drug-strength unit (mg/mcg/g/mEq)
+#   - is not a clinical-trial or pharmacokinetic context
+#
+# This handles any PM layout without needing a format-specific pattern.
+
+_PACK_SCAN_CONTAINER_RE = re.compile(
+    r"\b(?:bottles?|vials?|blisters?|blister\s+packs?|ampoules?|ampuls?|ampules?|"
+    r"syringes?|prefilled?\s+syringes?|cartridges?|auto.?injectors?|"
+    r"unit\s*[–-]?\s*dose\s+strips?|strips?|sachets?|tubes?|cartons?|pouches?|"
+    r"canisters?|inhalers?|pens?|droppers?)\b",
+    re.IGNORECASE,
+)
+
+# Numbers immediately followed by drug-strength units are strengths, not counts.
+_PACK_STRENGTH_NUM_RE = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|μg|micrograms?|nanograms?|ng\b|g\b|mEq|IU|mmol)\b",
+    re.IGNORECASE,
+)
+
+# Sentences that belong to clinical/PK/toxicology context, not packaging.
+_PACK_CLINICAL_RE = re.compile(
+    r"\b(?:patients?|subjects?|participants?|volunteers?|"
+    r"study|studies|clinical\s+trial|placebo|randomized|n\s*=\s*\d|"
+    r"adverse|efficacy|administered\s+to|half.?life|bioavailability|"
+    r"pharmacokinetic|absorption|distribution|elimination)\b",
+    re.IGNORECASE,
+)
+
+
+def _scan_for_pack_sentence(text: str) -> Optional[tuple[Optional[str], str]]:
+    """Content-first packaging scanner: no section format assumed.
+
+    Splits text into sentences and finds the first one that contains both a
+    container keyword and a non-strength quantity number.  Returns
+    (pack_size_text, container_label) or None.
+
+    pack_size_text is verbatim from the PM:
+      - "in bottles of 100, 500 and 1000 and in unit dose strips of 100"
+      - "in 60 mL and 120 mL plastic bottles"
+      - "in aluminium PVC/PCTFE blisters; 56-tablet carton"
+    """
+    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
+        sent = sent.strip()
+        if len(sent) < 10:
+            continue
+        if not _PACK_SCAN_CONTAINER_RE.search(sent):
+            continue
+        if _PACK_CLINICAL_RE.search(sent):
+            continue
+        # Must have a number that survives stripping out strength values
+        without_strengths = _PACK_STRENGTH_NUM_RE.sub("", sent)
+        if not re.search(r"\b\d+\b", without_strengths):
+            continue
+        label = _extract_pack_style_from_text(sent)
+        if not label:
+            continue
+        # Extract the informative slice: "in …" after "available/provided/supplied/…"
+        av = re.search(
+            r"\b(?:available|provided|supplied|packaged|sold|dispensed)\s+(in\s+\S.+)",
+            sent, re.IGNORECASE,
+        )
+        size_text: Optional[str] = av.group(1).strip() if av else re.sub(r"\s+", " ", sent.strip())
+        if size_text and len(size_text) > 250:
+            size_text = size_text[:250].rsplit(" ", 1)[0]
+        return size_text, label
+    return None
+
 
 def _extract_packaging_from_pdf(s6_text: str) -> tuple[Optional[str], Optional[str]]:
-    """Extract (pack_size, pack_style) from the §6 Packaging subsection.
+    """Extract (pack_size, pack_style) from §6 text.
 
-    Both values come from the same raw text block so they are always consistent.
-    Stage 2 (DPD API) overrides both in enrich_labeling when it has data.
+    Two-tier strategy — no enumerating format variants:
 
-    Reject rules for the captured block:
-      (a) contains "the following", "dosage strengths", or "dosage form" → heading fragment, skip.
-      (b) any line ends with ":" → heading fragment, skip.
-      (c) must contain at least one container-vocabulary keyword.
+    Tier 1 — explicit Packaging heading (reliable when present):
+      Matches "Packaging" or "Packaging:" as a standalone section header and
+      extracts the block that follows.  pack_size is parsed by
+      _extract_pack_size_from_product_info (good for terse DPD-style text).
+      Reject rules:
+        (a) "the following" / "dosage strengths" / "dosage form" → heading fragment.
+        (b) any line ends with ":" → heading fragment.
+        (c) no container vocabulary keyword → not a packaging block.
+
+    Tier 2 — content-first sentence scan (format-agnostic fallback):
+      Finds the first sentence in the text that contains a container keyword AND
+      a quantity number that is not a drug-strength unit (mg, mcg, etc.).
+      Works for "Available in bottles of 100…", "Supplied in 2 g tubes…",
+      "Each blister contains 10 tablets.", and any future layout.
+      Stage 2 (DPD API) values override both tiers in enrich_labeling.
     """
-    pats = [
+    # ── Tier 1: explicit Packaging section header ─────────────────────────────
+    for pat in [
         r"(?m)^Packaging\s*$\n(.+?)(?=\n\n|\n[A-Z\d]|\Z)",
         r"(?m)^Packaging\s*:\s*(.+?)(?=\n\n|\n[A-Z\d]|\Z)",
-        r"(?:provided|available)\s+in\s+(.+?)(?:\.|;|\n|$)",
-    ]
-    for pat in pats:
+    ]:
         m = re.search(pat, s6_text, re.IGNORECASE | re.DOTALL)
         if not m:
             continue
@@ -925,6 +1025,12 @@ def _extract_packaging_from_pdf(s6_text: str) -> tuple[Optional[str], Optional[s
             continue
         pack_size = _extract_pack_size_from_product_info(val)
         return pack_size, label
+
+    # ── Tier 2: general sentence scan — no format assumed ─────────────────────
+    result = _scan_for_pack_sentence(s6_text)
+    if result:
+        return result
+
     return None, None
 
 
@@ -944,10 +1050,33 @@ _KNOWN_PRESERVATIVES_RE = re.compile(
 # ── Non-medicinal ingredients verbatim extraction ─────────────────────────────
 # Flexible heading match: "Non-medicinal Ingredients", "Nonmedicinal Ingredients",
 # "Clinically Relevant Non-medicinal Ingredients", "Nonmedical Ingredients".
+#
+# IMPORTANT: Must be anchored to line-start ((?:^|\n)[ \t]*).  Without the anchor
+# the pattern matches "nonmedicinal ingredients" embedded mid-sentence in the
+# patient-information leaflet heading "What the nonmedicinal ingredients are:",
+# causing the entire PIL column to be captured as the ingredient list.
 _NM_HEADING_RE = re.compile(
-    r"(?:Clinically\s+Relevant\s+)?"
-    r"Non[-\s]?medicinal\s+Ingredients?"
+    r"(?:^|\n)[ \t]*(?:Clinically\s+Relevant\s+)?Non[-\s]?medicinal\s+Ingredients?"
+    r"|(?:^|\n)[ \t]*Nonmedical\s+Ingredients?",
+    re.IGNORECASE,
+)
+
+# No-line-start variant used ONLY for in-place substitution in _extract_text_async.
+# The table column extractor injects the clean NM list back into the raw page text,
+# which may have the heading mid-line due to column interleaving.
+_NM_HEADING_ANYWHERE_RE = re.compile(
+    r"(?:Clinically\s+Relevant\s+)?Non[-\s]?medicinal\s+Ingredients?"
     r"|Nonmedical\s+Ingredients?",
+    re.IGNORECASE,
+)
+
+# Phrases that appear in patient-information leaflets (PIL) but never in the
+# professional PM composition list.  If the captured NM block contains any of
+# these, the extraction is contaminated by a parallel PIL column.
+_PIL_CONTAMINATION_RE = re.compile(
+    r"\b(?:this\s+leaflet|contact\s+your\s+(?:doctor|pharmacist)|side\s+effect|"
+    r"how\s+to\s+(?:store|take|use)\b|missed\s+dose|overdose|usual\s+(?:adult\s+)?dose|"
+    r"what\s+the\s+medication|what\s+it\s+does|when\s+it\s+should\s+not)\b",
     re.IGNORECASE,
 )
 
@@ -955,8 +1084,9 @@ _NM_HEADING_RE = re.compile(
 # they are sub-headers within the list).
 _NM_END_RE = re.compile(
     r"^(?:"
-    r"Packaging|Storage|Shelf\s+Life|Description\b|"
-    r"Administration\b|Route\b|"
+    r"Packaging|Storage|Stability|Shelf\s+Life|Description\b|"
+    r"Administration\b|Route\b|Availability\b|Microbiology\b|"
+    r"PART\s+(?:I{1,3}|IV|VI{0,3}|IX|X)\b|"  # PART II, PART III, PART IV …
     r"\d+\s+(?:DOSAGE|PHARMACEUTICAL|CLINICAL|NON-CLINICAL|WARNINGS|ADVERSE)"
     r")",
     re.IGNORECASE,
@@ -1033,13 +1163,25 @@ def _extract_nm_from_table_column(page: Any) -> Optional[str]:
 def _extract_nonmedicinal_ingredients(s6_text: str) -> Optional[str]:
     """Copy the Non-medicinal Ingredients list VERBATIM from §6 text.
 
-    Two layouts handled (priority order):
+    Three layouts handled (priority order):
     1. Inline: heading immediately followed by ": content" on same line.
     2. Block:  heading alone on one line, content on subsequent lines.
+    3. "Each gram/mL/unit of X contains:" — common in topical/parenteral PMs
+       that list all ingredients (active + inactive) together without a separate
+       non-medicinal heading.
+
+    PIL contamination guard: if the captured block contains patient-leaflet phrases
+    (e.g. "this leaflet", "contact your doctor"), the column-merge has interleaved
+    the consumer section with the professional PM.  Such results are discarded and
+    the next layout is tried.
 
     Returns text exactly as it appears in the PDF — no normalisation.
     """
     def _collect_after(text_after: str) -> Optional[str]:
+        # pdfplumber sometimes embeds page-number markers inline:
+        # "...D&C yellow No. 10. - 11 - PART II: SCIENTIFIC INFORMATION..."
+        # Replace these with newlines so the split below sees them as line breaks.
+        text_after = re.sub(r"\s+-\s*\d+\s*-\s+", "\n", text_after)
         lines = text_after.split("\n")
         collected: list[str] = []
         for line in lines:
@@ -1048,29 +1190,91 @@ def _extract_nonmedicinal_ingredients(s6_text: str) -> Optional[str]:
                 if collected:
                     break
                 continue
-            if collected and _NM_END_RE.match(stripped):
+            # Stop on section headings — even the very first line.  Without this guard,
+            # a table column header like "Non-medicinal Ingredients" (no colon) would
+            # match _NM_HEADING_RE and then the next table column "Administration
+            # Strength/Composition" would be captured before the stop check fires.
+            if _NM_END_RE.match(stripped):
                 break
             collected.append(stripped)
         return " ".join(collected).strip() if collected else None
 
+    def _clean_or_none(result: Optional[str]) -> Optional[str]:
+        """Return result unless it is contaminated by PIL text."""
+        if not result:
+            return None
+        if _PIL_CONTAMINATION_RE.search(result):
+            logger.debug("NM ingredients: PIL contamination detected — discarding (%d chars)", len(result))
+            return None
+        return result
+
     # Priority 1: inline format — heading + ": content" on same line
+    # Use line-start anchor so "What the nonmedicinal ingredients are:" (PIL) is skipped.
     inline_re = re.compile(
-        r"(?:Clinically\s+Relevant\s+)?Non[-\s]?medicinal\s+Ingredients?\s*:\s*"
-        r"|Nonmedical\s+Ingredients?\s*:\s*",
+        r"(?:^|\n)[ \t]*(?:Clinically\s+Relevant\s+)?Non[-\s]?medicinal\s+Ingredients?\s*:\s*"
+        r"|(?:^|\n)[ \t]*Nonmedical\s+Ingredients?\s*:\s*",
         re.IGNORECASE,
     )
     for m in inline_re.finditer(s6_text):
         after = s6_text[m.end():]
-        result = _collect_after(after)
+        result = _clean_or_none(_collect_after(after))
         if result:
             return result
 
-    # Priority 2: block format — heading on its own line
+    # Priority 1b: "non-medicinal excipients:" embedded in a sentence — old Health Canada PM
+    # format where the heading reads "...contains the following non-medicinal excipients: ..."
+    # No line-start anchor needed; this phrasing doesn't appear in PIL sections.
+    excipients_re = re.compile(
+        r"non[-\s]?medicinal\s+excipients?\s*:\s*",
+        re.IGNORECASE,
+    )
+    for m1b in excipients_re.finditer(s6_text):
+        after = s6_text[m1b.end():]
+        result = _clean_or_none(_collect_after(after))
+        if result:
+            return result
+
+    # Priority 1c: "Composition: [product name] contains: [NM list]" — old Health Canada PM
+    # format where the Composition section embeds the excipient list after "contains:".
+    # e.g. "Composition: TEVA-KETOCONAZOLE (ketoconazole) contains: pregelatinized starch, ..."
+    # LINE-START anchor is mandatory: prevents matching "Administration Strength/Composition"
+    # table headings where "Composition" is embedded mid-line and "contains" appears later in
+    # the active-ingredient sentence (which would capture the wrong block).
+    composition_contains_re = re.compile(
+        r"(?:^|\n)\s*Composition\s*[:\-]\s*[^\n]{0,120}\bcontains?\s*[:\-]\s*",
+        re.IGNORECASE,
+    )
+    m1c = composition_contains_re.search(s6_text)
+    if m1c:
+        after = s6_text[m1c.end():]
+        result = _clean_or_none(_collect_after(after))
+        if result:
+            return result
+
+    # Priority 2: block format — heading on its own line (line-start anchor guards PIL).
     m = _NM_HEADING_RE.search(s6_text)
-    if not m:
-        return None
-    after = re.sub(r"^\s*[:\-]?\s*", "", s6_text[m.end():])
-    return _collect_after(after)
+    if m:
+        after = re.sub(r"^\s*[:\-]?\s*", "", s6_text[m.end():])
+        result = _clean_or_none(_collect_after(after))
+        if result:
+            return result
+
+    # Priority 3: "Each gram/mL/unit of X contains:" format — topical/parenteral PMs
+    # that list all ingredients (active + non-medicinal) together.
+    each_re = re.compile(
+        r"[Ee]ach\s+(?:gram|g\b|mL|ml|litre|liter|tablet|capsule|unit|vial|ampoule|sachet)"
+        r"(?:\s+of\s+\S+(?:\s+\S+){0,3})?"
+        r"\s+contains?\s*[:\-]?\s*",
+        re.IGNORECASE,
+    )
+    m3 = each_re.search(s6_text)
+    if m3:
+        after = s6_text[m3.end():]
+        result = _clean_or_none(_collect_after(after))
+        if result:
+            return result
+
+    return None
 
 
 def _extract_ph_regex(s13_text: str) -> str:
@@ -1090,7 +1294,15 @@ def _extract_ph_regex(s13_text: str) -> str:
         r"\bpH\b[^\n]*?[:\-]\s*(\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?)(?!\s*[:\-]\s*[\d<>])",
     ]
     val = _find_in_section(s13_text, single_pats)
-    return val.strip() if val else NOT_IN_PM
+    if val:
+        val = val.strip()
+        # Validate: all numeric parts must be physically possible pH (0–14).
+        # OCR often drops decimal points (e.g. "6.7" → "67"), which this rejects.
+        nums = re.findall(r'\d+(?:\.\d+)?', val)
+        if nums and all(0.0 <= float(n) <= 14.0 for n in nums):
+            return val
+        logger.warning("pH value out of valid range 0-14: %r — discarded", val)
+    return NOT_IN_PM
 
 
 def _extract_appearance_regex(
@@ -1112,21 +1324,47 @@ def _extract_appearance_regex(
         m = block_re.search(desc_text)
         if m:
             block_text = m.group(1)
-        else:
-            lm = re.search(
-                r"^.*" + strength_pat + r".*$",
-                desc_text, re.IGNORECASE | re.MULTILINE,
-            )
-            if lm:
-                block_text = lm.group(0)
+        # If no bulleted strength block found, use full description text.
+        # A single-line fallback is too narrow: color/shape words often appear
+        # on a different line than the strength (e.g. "amber-colored oblong capsule\n
+        # each containing icosapent ethyl 1 g").
 
-    cm = re.search(_COLOR_WORDS, block_text, re.IGNORECASE)
-    if cm:
-        out["color"] = cm.group(0).strip()
+    # Color: iterate all matches; take the first one that has a dosage-form context word
+    # within 200 chars. Using finditer instead of search prevents the first color word
+    # in a non-appearance context (e.g. "yellow jaundice", "white blood cell") from
+    # blocking the correct match that appears later in the text (e.g. "amber gel").
+    for cm in re.finditer(_COLOR_WORDS, block_text, re.IGNORECASE):
+        pos = cm.start()
+        window = block_text[max(0, pos - 200): pos + 200]
+        if not _APPEARANCE_CONTEXT.search(window):
+            continue
+        # Skip drug-substance descriptions: "white to slightly beige coloured powder"
+        # "powder" or "crystalline" within 120 chars after the match signals drug-substance
+        after_match = block_text[pos: pos + 120]
+        if re.search(r"\bpowder\b|\bcrystalline\b", after_match, re.IGNORECASE):
+            continue
+        color = cm.group(0).strip()
+        # Extend to compound color phrases: "white to slightly grey", "light pink to pale red"
+        _ext = re.match(
+            r"\s+to\s+(?:slightly\s+|almost\s+|very\s+|pale\s+|light\s+|dark\s+|off-?)?"
+            r"(?:white|red|pink|orange|amber|yellow|gold(?:en)?|green|blue|purple|violet|"
+            r"brown|beige|grey|gray|black|cream|tan|ivory|maroon)\b",
+            block_text[pos + len(cm.group(0)):],
+            re.IGNORECASE,
+        )
+        if _ext:
+            color = (color + _ext.group(0)).strip()
+        out["color"] = color
+        break
 
-    sm = re.search(_SHAPE_WORDS, block_text, re.IGNORECASE)
-    if sm:
-        out["shape"] = sm.group(0).strip()
+    # Shape: also apply context check to avoid false matches from medical terminology
+    # (e.g. "kidney" in "kidney infection", "diamond" in drug names).
+    for sm in re.finditer(_SHAPE_WORDS, block_text, re.IGNORECASE):
+        pos = sm.start()
+        window = block_text[max(0, pos - 200): pos + 200]
+        if _APPEARANCE_CONTEXT.search(window):
+            out["shape"] = sm.group(0).strip()
+            break
 
     szm = re.search(_SIZE_PAT, block_text, re.IGNORECASE)
     if szm:
@@ -1145,19 +1383,21 @@ _S6_MARKERS = [
     # Matches "6 DOSAGE FORMS, COMPOSITION..." and "6. Dosage Forms, Strengths, Composition..."
     # Negative lookahead rejects TOC entries which have dot leaders like "..........9"
     r"^6[\.\s]+DOSAGE FORMS?(?!.*\.{4,}).*COMPOSITION",
-    r"^6[\.\s]+PHARMACEUTICAL INFORMATION",
-    r"^PART II.*SCIENTIFIC INFORMATION",
+    r"^6[\.\s]+PHARMACEUTICAL INFORMATION(?!.*\.{4,})",
+    r"^PART II.*SCIENTIFIC INFORMATION(?!.*\.{4,})",
+    # Older/generic PMs use unnumbered heading: "DOSAGE FORMS, COMPOSITION AND PACKAGING"
+    r"^DOSAGE FORMS?,\s*(?:STRENGTHS?,\s*)?COMPOSITION(?!.*\.{4,})",
 ]
 _S6_END = [r"^7[\.\s]+", r"^PART\s+III", r"^CLINICAL\s+PHARMACOLOGY"]
 
 _S13_MARKERS = [
     r"^13[\.\s]+PHARMACEUTICAL INFORMATION",
-    r"^PHARMACEUTICAL INFORMATION",
+    r"^PHARMACEUTICAL INFORMATION(?!.*\.{4,})",
 ]
 _S13_END = [r"^14[\.\s]+", r"^NON-CLINICAL", r"^TOXICOLOGY"]
 
 _DESC_MARKERS = [r"[Dd]escription", r"[Pp]hysical\s+[Dd]escription"]
-_DESC_END = [r"[Cc]omposition", r"[Pp]ackaging", r"[Ss]torage", r"\n\n\n"]
+_DESC_END = [r"[Cc]omposition", r"[Pp]ackaging", r"[Ss]torage", r"MICROBIOLOGY", r"\n\n\n"]
 
 
 # ── Main extraction entry point ───────────────────────────────────────────────
@@ -1184,17 +1424,64 @@ async def parse_labeling_fields_async(
     """
     row: dict = {}
 
+    # ── Full-document fallback text ───────────────────────────────────────────
+    # When no section marker matches (novel PM template), we fall back to
+    # searching the entire document.  Individual extractors each have their own
+    # keyword guards (explicit headings, context proximity checks, range
+    # validation) so searching the full text is safe — they will still return
+    # NOT_IN_PM for fields that are genuinely absent.
+    #
+    # TOC avoidance: TOC pages are almost always the first 1–2 pages.  In full-
+    # doc fallback mode we skip them for the Description subsection search so
+    # "Description.....5" in the TOC does not win over the actual section body.
+    full_doc_text = "\n".join(text for _, text in pages)
+    full_doc_page = pages[0][0] if pages else 1
+    # Pages with more than 40 % of lines ending in dots are treated as TOC pages.
+    _dot_re = re.compile(r"\.{4,}\s*\d*\s*$")
+    non_toc_pages = [
+        (pn, txt) for pn, txt in pages
+        if not (
+            txt.strip()
+            and sum(1 for ln in txt.splitlines() if _dot_re.search(ln))
+            / max(len(txt.splitlines()), 1) > 0.4
+        )
+    ] or pages
+
     s6 = _find_section(pages, _S6_MARKERS, _S6_END)
     s6_page = s6[0] if s6 else None
     s6_text = s6[1] if s6 else ""
+    s6_fallback = not bool(s6_text)
+    if s6_fallback:
+        # No known §6 template matched — search the full document.
+        s6_text = full_doc_text
+        s6_page = full_doc_page
+        logger.info("No §6 marker matched — using full-document text for §6 field extraction")
 
     s13 = _find_section(pages, _S13_MARKERS, _S13_END)
     s13_page = s13[0] if s13 else None
     s13_text = s13[1] if s13 else ""
+    if not s13_text:
+        # No known §13 template matched — pH searched against full document.
+        s13_text = full_doc_text
+        s13_page = full_doc_page
+        logger.info("No §13 marker matched — using full-document text for pH extraction")
 
-    desc_section = _find_section(pages, _DESC_MARKERS, _DESC_END)
-    desc_page = desc_section[0] if desc_section else s6_page
-    desc_text = desc_section[1] if desc_section else s6_text
+    # ── Description subsection ────────────────────────────────────────────────
+    # Search for Description subsection within §6 text to avoid matching TOC
+    # entries (e.g. "Description...........5" in the table of contents triggers
+    # the marker, then "Composition...........5" immediately ends it, leaving
+    # desc_text as a single useless TOC line with no color/shape content).
+    if not s6_fallback:
+        # §6 was found via marker — search for Description inside it (TOC-safe).
+        desc_in_s6 = _find_section([(s6_page or 1, s6_text)], _DESC_MARKERS, _DESC_END)
+        desc_page = desc_in_s6[0] if desc_in_s6 else s6_page
+        desc_text = desc_in_s6[1] if desc_in_s6 else s6_text
+    else:
+        # Full-doc fallback — skip TOC pages when hunting for Description.
+        desc_section = _find_section(non_toc_pages, _DESC_MARKERS, _DESC_END)
+        desc_page = desc_section[0] if desc_section else s6_page
+        # If no Description subsection found, use full doc (color context check guards it).
+        desc_text = desc_section[1] if desc_section else full_doc_text
 
     # ── Non-medicinal Ingredients (verbatim, always deterministic) ───────────
     nm_val = _extract_nonmedicinal_ingredients(s6_text)
@@ -1228,6 +1515,63 @@ async def parse_labeling_fields_async(
             val = app.get(field)
             row[field] = val if val else NOT_IN_PM
             row[f"{field}_page"] = desc_page if val else None
+
+    # ── Consumer section (Part III) fallback for appearance ───────────────────
+    # Some PMs (e.g. topical gels) only describe the physical appearance in the
+    # consumer information section ("XOLEGEL comes in a smooth, clear amber gel")
+    # while the professional section lists only dye codes.  If appearance fields
+    # remain NOT_IN_PM after professional PM extraction, search Part III.
+    _appearance_fields_missing = all(
+        row.get(f) == NOT_IN_PM for f in ("color", "shape")
+    )
+    if _appearance_fields_missing and not provider_app:
+        part3 = _find_section(
+            pages,
+            [r"^PART\s+III", r"^CONSUMER\s+INFORMATION"],
+            [],  # no end marker — collect to end of document
+        )
+        if part3:
+            part3_page, part3_text = part3
+            # Use a targeted product-description sentence pattern rather than the
+            # general appearance regex.  The consumer section has color words in
+            # adverse-reaction text ("skin may appear red") that pass the broad
+            # context check.  A product-description sentence always uses "comes in",
+            # "is a", "is supplied as", or "available as" before the color.
+            _prod_desc_re = re.compile(
+                r"(?:comes?\s+in\s+(?:a\s+)?(?:[^\s.!?]+\s+){0,6}"
+                r"|is\s+(?:supplied\s+as\s+a\s+)?(?:[^\s.!?]+\s+){0,4}"
+                r"|available\s+as\s+(?:a\s+)?(?:[^\s.!?]+\s+){0,4})"
+                r"(" + _COLOR_WORDS + r")",
+                re.IGNORECASE,
+            )
+            for pm in _prod_desc_re.finditer(part3_text):
+                if row.get("color") == NOT_IN_PM:
+                    row["color"] = pm.group(1).strip()
+                    row["color_page"] = part3_page
+                    logger.info("color %r sourced from consumer section (Part III)", row["color"])
+                    break
+
+    # ── "AVAILABILITY OF DOSAGE FORMS" fallback (old-style PMs) ─────────────────
+    # Old Health Canada PMs describe tablet/capsule appearance in a dedicated
+    # "AVAILABILITY OF DOSAGE FORMS" section instead of a "Description" subsection
+    # inside §6.  If appearance fields are still missing after the main and Part III
+    # searches, try this section directly.
+    if any(row.get(f) == NOT_IN_PM for f in ("color", "shape")) and not provider_app:
+        avail_section = _find_section(
+            non_toc_pages,
+            [r"AVAILABILITY\s+OF\s+DOSAGE\s+FORMS?", r"^SUPPLIED\b"],
+            [r"MICROBIOLOGY", r"CLINICAL\s+(?:PHARMACOLOGY|TRIALS)", r"PHARMACOKINETICS",
+             r"TOXICOLOGY", r"REFERENCES"],
+        )
+        if avail_section:
+            avail_page, avail_text = avail_section
+            norm_s = _normalize_strength(din_strength) if din_strength else None
+            app_avail = _extract_appearance_regex(avail_text, norm_s)
+            for field in ("color", "shape"):
+                if app_avail.get(field) and row.get(field) == NOT_IN_PM:
+                    row[field] = app_avail[field]
+                    row[f"{field}_page"] = avail_page
+                    logger.info("%s %r sourced from AVAILABILITY OF DOSAGE FORMS section", field, row[field])
 
     # ── pH ────────────────────────────────────────────────────────────────────
     if s13_text:

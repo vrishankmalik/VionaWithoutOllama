@@ -70,6 +70,19 @@ _NO_NOC_RECORD = {
     "noc_therapeutic_class": "No NOC record",
 }
 
+# Sentinel for DINs present in NOC but absent from DPD (no product entry found)
+_NO_DPD_RECORD = {
+    "brand_name": "Not in DPD",
+    "company": "Not in DPD",
+    "ingredient": "Not in DPD",
+    "strength": "Not in DPD",
+    "dosage_form": "Not in DPD",
+    "route": "Not in DPD",
+    "status": "Not in DPD",
+    "_drug_code": None,
+    "_schedule": None,
+}
+
 _LABELING_FIELDS = (
     "active_ingredient", "nonmedicinal_ingredients",
     "pack_size", "pack_style",
@@ -412,13 +425,18 @@ def build_sheet1(
     rows = []
     for din in all_dins:
         row: dict[str, Any] = {"din": din}
-        row.update(dpd_by_din.get(din, {}))
+        dpd_rec = dpd_by_din.get(din)
+        row.update(dpd_rec if dpd_rec is not None else _NO_DPD_RECORD)
         noc_data = noc_by_din.get(din)
         row.update(noc_data if noc_data is not None else _NO_NOC_RECORD)
         row.update(_aggregate_patents_latest(din))
-        row.update(_get_labeling_cols(din))
-        dpd_rec = dpd_by_din.get(din, {})
-        row.update(_get_dp_cols(dpd_rec.get("ingredient"), dpd_rec.get("company"), dp_table))
+        if dpd_rec is not None:
+            row.update(_get_labeling_cols(din))
+        else:
+            # No DPD record → no drug_code → PM was never fetched; mark all labeling fields.
+            row.update({field: "Not in DPD" for field in _LABELING_FIELDS})
+        row.update(_get_dp_cols(dpd_rec.get("ingredient") if dpd_rec else None,
+                                dpd_rec.get("company") if dpd_rec else None, dp_table))
         rows.append(row)
 
     df = pd.DataFrame(rows)
