@@ -26,6 +26,7 @@ CLI:
 """
 from __future__ import annotations
 
+import datetime
 import io
 import logging
 import re
@@ -110,9 +111,11 @@ _NEVER_DROP_COLS = frozenset({
 })
 
 # Canonical Sheet 1 column order — fixed, no dynamic patent groups.
+# DIN is first so every row is immediately identifiable.
 _SHEET1_COLS = (
+    "din",
     "ingredient_name",
-    "din", "ingredient", "brand_name", "company", "strength", "dosage_form",
+    "ingredient", "brand_name", "company", "strength", "dosage_form",
     "route", "status", "_drug_code", "_schedule",
     "noc_date", "reason_for_supplement", "submission_class",
     "noc_submission_type", "noc_therapeutic_class",
@@ -122,6 +125,26 @@ _SHEET1_COLS = (
     "weight", "ph",
     "dp_6yr_no_file_date", "pediatric_extension", "data_protection_ends",
 )
+
+# Display-name overrides: internal key → header shown in the XLSX.
+# All other column keys are title-cased via _col_to_header().
+_HEADER_DISPLAY: dict[str, str] = {
+    "din": "DIN",
+    "ingredient": "SKU Name",
+}
+
+
+def _col_to_header(col_name: str) -> str:
+    """Return the display header for a column key."""
+    if col_name in _HEADER_DISPLAY:
+        return _HEADER_DISPLAY[col_name]
+    return col_name.replace("_", " ").title()
+
+
+def _apply_display_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Rename columns to their display names for XLSX output (single-product path)."""
+    rename = {k: v for k, v in _HEADER_DISPLAY.items() if k in df.columns}
+    return df.rename(columns=rename) if rename else df
 
 
 def _is_empty_for_fill(v: Any) -> bool:
@@ -184,6 +207,36 @@ def _prune_sparse_columns(
 
 # ── Sheet 1 helpers ───────────────────────────────────────────────────────────
 
+# Matches a bare mass strength that has no volume denominator yet:
+# e.g. "25 MG", "0.5 MCG", "100 IU" — but not "25 MG/ML" or "10 MG/5 ML".
+_BARE_MASS_RE = re.compile(
+    r"^([\d.,]+\s+(?:MG|MCG|G|IU|UNITS?|MEQ)\b)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_solution_strength(
+    strength: Optional[str],
+    dosage_form: Optional[str],
+) -> Optional[str]:
+    """For Solution dosage forms only: append /ML when strength is a bare mass.
+
+    '25 MG' + form 'Solution' → '25 MG/ML'.
+    Strengths that already contain '/' are left unchanged.
+    Non-Solution forms are left unchanged.
+    """
+    if not strength or not dosage_form:
+        return strength
+    if "solution" not in dosage_form.lower():
+        return strength
+    if "/" in strength:
+        return strength
+    m = _BARE_MASS_RE.match(strength.strip())
+    if m:
+        return m.group(1).rstrip() + "/ML"
+    return strength
+
+
 def _is_excluded_din(din: Optional[str]) -> bool:
     return din is None or din.strip().lower() in _EXCLUDED_DIN_VALUES
 
@@ -205,7 +258,7 @@ def _collect_dpd_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
             "brand_name": r.brand_name,
             "company": r.company,
             "ingredient": r.ingredient,
-            "strength": r.strength,
+            "strength": _normalize_solution_strength(r.strength, r.dosage_form),
             "dosage_form": r.dosage_form,
             "route": r.route,
             "status": r.status,
@@ -256,7 +309,9 @@ def _collect_noc_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
         entries.sort(key=lambda e: e["noc_date"] or "")
         def _join(field: str) -> Optional[str]:
             vals = [str(e[field]) if e[field] is not None else "" for e in entries]
-            combined = _NOC_JOIN_SEP.join(v for v in vals if v)
+            # Join ALL entries (one line per record); never skip blank values so
+            # every column has the same line count and line N refers to record N.
+            combined = _NOC_JOIN_SEP.join(vals)
             return combined or None
         out[din] = {
             "noc_date": _join("noc_date"),
@@ -274,34 +329,60 @@ def _collect_noc_rows(records: list[DrugRecord]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _aggregate_patents_latest(din: str) -> dict[str, Any]:
-    """Return latest-expiry patent: patent_count + patent_number/grant_date/expiry_date.
+def _aggregate_patents_latest(
+    din: str,
+    as_of: Optional["datetime.date"] = None,
+) -> dict[str, Any]:
+    """Return active-patent summary: patent_count + patent_number/grant_date/expiry_date.
 
-    Selects the patent with the latest expiry_date; tiebreaker is highest
-    patent_number string.  Missing expiry_date cannot win (treated as min date).
+    as_of: cut-off date for "active" (expiry > as_of); defaults to today.
+
+    patent_count = number of patents whose expiry_date is strictly after as_of.
+    If stored patents exist but all are expired, patent_count is the sentinel
+    string "all patents expired" and the detail cells are blank.
+    If no patents are stored for this DIN, patent_count is 0 and details are None.
+
+    The detail columns show the latest-expiry active patent (tiebreak: highest
+    patent_number string).  They are blank when all patents are expired.
     """
-    import datetime
+    import datetime as _dt
+    if as_of is None:
+        as_of = _dt.date.today()
+
     rows = get_patents_for_din(din)
-    out: dict[str, Any] = {"patent_count": len(rows)}
-    if not rows:
-        out["patent_number"] = None
-        out["patent_grant_date"] = None
-        out["patent_expiry_date"] = None
-        return out
 
-    def _parse_date(s: Any) -> datetime.date:
+    def _parse_date(s: Any) -> "_dt.date":
         if not s:
-            return datetime.date.min
+            return _dt.date.min
         try:
-            return datetime.date.fromisoformat(str(s)[:10])
+            return _dt.date.fromisoformat(str(s)[:10])
         except (ValueError, TypeError):
-            return datetime.date.min
+            return _dt.date.min
 
-    best = max(rows, key=lambda r: (_parse_date(r.get("expiry_date")), r.get("patent_number") or ""))
-    out["patent_number"] = best.get("patent_number")
-    out["patent_grant_date"] = best.get("grant_date")
-    out["patent_expiry_date"] = best.get("expiry_date")
-    return out
+    if not rows:
+        return {
+            "patent_count": 0,
+            "patent_number": None,
+            "patent_grant_date": None,
+            "patent_expiry_date": None,
+        }
+
+    active = [r for r in rows if _parse_date(r.get("expiry_date")) > as_of]
+    if not active:
+        return {
+            "patent_count": "all patents expired",
+            "patent_number": None,
+            "patent_grant_date": None,
+            "patent_expiry_date": None,
+        }
+
+    best = max(active, key=lambda r: (_parse_date(r.get("expiry_date")), r.get("patent_number") or ""))
+    return {
+        "patent_count": len(active),
+        "patent_number": best.get("patent_number"),
+        "patent_grant_date": best.get("grant_date"),
+        "patent_expiry_date": best.get("expiry_date"),
+    }
 
 
 def _get_labeling_cols(din: str) -> dict[str, Any]:
@@ -386,6 +467,7 @@ def build_sheet1(
     response: SearchResponse,
     dp_table: Optional[list[dict]] = None,
     ingredient_name: Optional[str] = None,
+    as_of: Optional["datetime.date"] = None,
 ) -> pd.DataFrame:
     """Build Sheet 1: one row per DIN, DPD + NOC + patents + labeling + data protection.
 
@@ -429,7 +511,7 @@ def build_sheet1(
         row.update(dpd_rec if dpd_rec is not None else _NO_DPD_RECORD)
         noc_data = noc_by_din.get(din)
         row.update(noc_data if noc_data is not None else _NO_NOC_RECORD)
-        row.update(_aggregate_patents_latest(din))
+        row.update(_aggregate_patents_latest(din, as_of=as_of))
         if dpd_rec is not None:
             row.update(_get_labeling_cols(din))
         else:
@@ -593,6 +675,7 @@ def build_workbook(
     response: SearchResponse,
     source_errors: Optional[dict[str, Optional[str]]] = None,
     dp_table: Optional[list[dict]] = None,
+    as_of: Optional[datetime.date] = None,
 ) -> bytes:
     """Assemble the enriched workbook and return XLSX bytes.
 
@@ -600,12 +683,14 @@ def build_workbook(
     '⚠ Source Status' sheet that visibly flags every failed source.
     dp_table: pre-fetched active data protection register rows (from
     fetch_data_protection_table()); None means the three dp_* columns are blank.
+    as_of: reference date for patent activity (default = today).
     """
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        sheet1 = build_sheet1(response, dp_table=dp_table)
-        sheet1.to_excel(writer, sheet_name="DPD + NOC + Patents", index=False)
-        _style_sheet(writer.sheets["DPD + NOC + Patents"], sheet1)
+        sheet1 = build_sheet1(response, dp_table=dp_table, as_of=as_of)
+        sheet1_out = _apply_display_names(sheet1)
+        sheet1_out.to_excel(writer, sheet_name="DPD + NOC + Patents", index=False)
+        _style_sheet(writer.sheets["DPD + NOC + Patents"], sheet1_out)
 
         sheet2 = build_sheet2(response)
         sheet2.to_excel(writer, sheet_name="Generic Submissions", index=False)
@@ -752,7 +837,7 @@ def _write_vertical_sheet(
     cols = list(df.columns) if not df.empty else []
     for j, col_name in enumerate(cols, 1):
         cell = ws.cell(row=HEADER_ROW, column=j)
-        cell.value = col_name.replace("_", " ").title()
+        cell.value = _col_to_header(col_name)
         cell.font = Font(bold=True, name="Calibri", size=10, color="FFFFFF")
         cell.fill = HEADER_FILL
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=False)
@@ -818,11 +903,62 @@ def _write_vertical_sheet(
     ws.freeze_panes = "A3"
 
 
+def _write_reconciliation_sheet(wb: Any, recon_df: pd.DataFrame) -> None:
+    """Write the IQVIA Reconciliation sheet to the workbook."""
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    ws = wb.create_sheet(title="IQVIA Reconciliation")
+
+    STATUS_FILLS = {
+        "matched":           "C6EFCE",  # green
+        "ambiguous":         "FFEB9C",  # yellow
+        "low_score":         "FFD7B5",  # orange
+        "no_din_match":      "FFC7CE",  # red
+        "din_no_iqvia_match": "E2EFDA",  # light green (DIN present, just no IQVIA data)
+    }
+
+    cols = list(recon_df.columns)
+    header_fill = PatternFill(start_color="3D226E", end_color="3D226E", fill_type="solid")
+
+    for j, col in enumerate(cols, 1):
+        cell = ws.cell(row=1, column=j)
+        cell.value = col.replace("_", " ").title()
+        cell.font = Font(bold=True, name="Calibri", size=10, color="FFFFFF")
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        col_len = max(len(col) + 4, 14)
+        ws.column_dimensions[get_column_letter(j)].width = min(col_len, 40)
+
+    status_col_idx = cols.index("status") + 1 if "status" in cols else None
+
+    for r_idx, (_, row) in enumerate(recon_df.iterrows(), 2):
+        status = str(row.get("status", "")) if "status" in row else ""
+        hex_fill = STATUS_FILLS.get(status, "FFFFFF")
+        row_fill = PatternFill(start_color=hex_fill, end_color=hex_fill, fill_type="solid")
+
+        for j, col in enumerate(cols, 1):
+            val = _safe_cell_val(row[col])
+            cell = ws.cell(row=r_idx, column=j)
+            cell.value = val
+            cell.fill = row_fill
+            cell.font = Font(name="Calibri", size=10)
+            cell.alignment = Alignment(vertical="top")
+
+    ws.freeze_panes = "A2"
+    if recon_df.shape[0] > 0:
+        from openpyxl.utils import get_column_letter as gcl
+        ws.auto_filter.ref = f"A1:{gcl(len(cols))}1"
+
+
 def build_workbook_multiproduct(
     products: list[tuple[str, SearchResponse]],
     source_errors: Optional[dict[str, Optional[str]]] = None,
     dp_table: Optional[list[dict]] = None,
-) -> "tuple[bytes, pd.DataFrame, pd.DataFrame]":
+    iqvia_df: Optional["pd.DataFrame"] = None,
+    debug_iqvia_rows: bool = False,
+    as_of: Optional[datetime.date] = None,
+) -> "tuple[bytes, pd.DataFrame, pd.DataFrame, pd.DataFrame]":
     """Build a vertically-stacked multi-ingredient two-tab workbook.
 
     Each product becomes one color-coded vertical block in the shared column
@@ -833,7 +969,11 @@ def build_workbook_multiproduct(
     Single-product is a degenerate case (one block) and produces the same
     underlying data as ``build_workbook``.
 
-    Returns (xlsx_bytes, combined_sheet1_df, combined_sheet2_df).
+    iqvia_df: collapsed IQVIA DataFrame (output of collapse_iqvia()).  When
+    provided, metric columns are appended to Sheet 1 by DIN matching, and an
+    "IQVIA Reconciliation" sheet is added.
+
+    Returns (xlsx_bytes, combined_sheet1_df, combined_sheet2_df, reconciliation_df).
     """
     import openpyxl
 
@@ -843,7 +983,7 @@ def build_workbook_multiproduct(
     sheet1_frames: list[pd.DataFrame] = []
     sheet2_frames: list[pd.DataFrame] = []
     for (name, response), _color in zip(products, colors):
-        s1 = build_sheet1(response, dp_table=dp_table, ingredient_name=name)
+        s1 = build_sheet1(response, dp_table=dp_table, ingredient_name=name, as_of=as_of)
         s2 = build_sheet2(response, ingredient_name=name)
         sheet1_frames.append(s1)
         sheet2_frames.append(s2)
@@ -869,6 +1009,14 @@ def build_workbook_multiproduct(
 
     combined_s1 = _reorder(combined_s1)
 
+    # ── Attach IQVIA metrics (optional) ──────────────────────────────────────
+    recon_df: pd.DataFrame = pd.DataFrame()
+    if iqvia_df is not None and not iqvia_df.empty and not combined_s1.empty:
+        from app.enrichment.iqvia import match_iqvia_to_sheet1
+        combined_s1, recon_df = match_iqvia_to_sheet1(
+            combined_s1, iqvia_df, debug_iqvia_rows=debug_iqvia_rows
+        )
+
     # ── Ingredient palette (name → color) for the sheet writer ───────────────
     ingredient_palette = [(name, colors[i]) for i, (name, _) in enumerate(products)]
 
@@ -883,11 +1031,14 @@ def build_workbook_multiproduct(
     ws2 = wb.create_sheet(title="Generic Submissions")
     _write_vertical_sheet(ws2, combined_s2, ingredient_palette)
 
+    if not recon_df.empty:
+        _write_reconciliation_sheet(wb, recon_df)
+
     if source_errors is not None:
         _build_status_sheet_multi(wb, products, source_errors)
 
     wb.save(buf)
-    return buf.getvalue(), combined_s1, combined_s2
+    return buf.getvalue(), combined_s1, combined_s2, recon_df
 
 
 def _build_status_sheet_multi(

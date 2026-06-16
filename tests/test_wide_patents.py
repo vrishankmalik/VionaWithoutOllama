@@ -118,13 +118,15 @@ def test_parse_patent_zip_by_din_empty_bytes():
 # ── _aggregate_patents_latest ─────────────────────────────────────────────────
 
 def test_aggregate_latest_selects_latest_expiry(tmp_path):
+    import datetime
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
     store_mod.upsert_patent("02322285", "2645810", "2000-01-01", "2005-01-01", "2020-01-01")
     store_mod.upsert_patent("02322285", "3022097", "2015-06-01", "2020-01-01", "2035-06-01")
 
     from app.enrichment.workbook import _aggregate_patents_latest
-    agg = _aggregate_patents_latest("02322285")
+    # Use as_of 2019-01-01 so both patents are active (2020 and 2035 expiries are both future).
+    agg = _aggregate_patents_latest("02322285", as_of=datetime.date(2019, 1, 1))
 
     assert agg["patent_count"] == 2
     assert agg["patent_number"] == "3022097", (
@@ -148,12 +150,14 @@ def test_aggregate_latest_no_patents(tmp_path):
 
 
 def test_aggregate_latest_single_patent(tmp_path):
+    import datetime
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
     store_mod.upsert_patent("00000001", "1111111", "2000-01-01", "2005-01-01", "2020-01-01")
 
     from app.enrichment.workbook import _aggregate_patents_latest
-    agg = _aggregate_patents_latest("00000001")
+    # as_of 2019 so the 2020 expiry is still active.
+    agg = _aggregate_patents_latest("00000001", as_of=datetime.date(2019, 1, 1))
 
     assert agg["patent_count"] == 1
     assert agg["patent_number"] == "1111111"
@@ -176,14 +180,20 @@ def test_aggregate_latest_tiebreak_uses_highest_patent_number(tmp_path):
 
 
 def test_aggregate_latest_missing_expiry_cannot_win(tmp_path):
-    """A patent with no expiry_date must not beat one with a real date."""
+    """A patent with no expiry_date (treated as min-date) must not beat one with a real date.
+
+    as_of 2024 ensures the 2025-expiry patent is active and the None-expiry one
+    is excluded (min-date < as_of), so the real-date patent must be selected.
+    """
+    import datetime
     import app.enrichment.store as store_mod
     store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
     store_mod.upsert_patent("00000001", "1111111", "2000-01-01", "2005-01-01", None)
     store_mod.upsert_patent("00000001", "2222222", "2001-01-01", "2006-01-01", "2025-01-01")
 
     from app.enrichment.workbook import _aggregate_patents_latest
-    agg = _aggregate_patents_latest("00000001")
+    # as_of 2024 so 2025-expiry is active; None-expiry maps to date.min and is excluded.
+    agg = _aggregate_patents_latest("00000001", as_of=datetime.date(2024, 1, 1))
 
     assert agg["patent_number"] == "2222222", (
         f"Patent with real expiry must win over None, got {agg['patent_number']!r}"

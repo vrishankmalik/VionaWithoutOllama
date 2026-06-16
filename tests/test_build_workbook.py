@@ -8,6 +8,7 @@ Three structural tests per the build spec:
 from __future__ import annotations
 
 import io
+from datetime import date as _date
 from datetime import datetime, timezone
 from typing import Any
 
@@ -614,4 +615,358 @@ def test_export_never_produces_old_sheet_names():
         )
     assert set(wb.sheetnames) == {"DPD + NOC + Patents", "Generic Submissions"}, (
         f"Expected exactly the two new sheet names; got: {wb.sheetnames}"
+    )
+
+
+# ── Fix 1: Active-only patents ───────────────────────────────────────────────
+#
+# Verification anchors (as-of 2026-06-01):
+#   ENDOMETRIN  02334992  expiry 2026-11-24  → active  → count 1, details shown
+#   BIJUVA      02505223  expiry 2032-11-21  → active  → count 1, details shown
+#   INPROSUB    02515504  expiry 2025-09-14  → expired → count "all patents expired", cells blank
+
+_AS_OF = _date(2026, 6, 1)
+
+
+def test_active_patent_shows_details(tmp_path):
+    """A patent whose expiry is after as_of is counted and its details are populated."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    # ENDOMETRIN-like: single patent expiring 2026-11-24 (active as of 2026-06-01)
+    store_mod.upsert_patent("02334992", "2334992P", "2006-11-24", "2011-03-15", "2026-11-24")
+
+    from app.enrichment.workbook import _aggregate_patents_latest
+    agg = _aggregate_patents_latest("02334992", as_of=_AS_OF)
+
+    assert agg["patent_count"] == 1, f"Expected 1 active patent, got {agg['patent_count']!r}"
+    assert agg["patent_number"] == "2334992P"
+    assert agg["patent_expiry_date"] == "2026-11-24"
+    assert agg["patent_grant_date"] == "2011-03-15"
+
+
+def test_bijuva_active_patent(tmp_path):
+    """BIJUVA-like patent (expiry 2032) is active as of 2026-06-01."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    store_mod.upsert_patent("02505223", "2505223P", "2012-11-21", "2018-05-01", "2032-11-21")
+
+    from app.enrichment.workbook import _aggregate_patents_latest
+    agg = _aggregate_patents_latest("02505223", as_of=_AS_OF)
+
+    assert agg["patent_count"] == 1
+    assert agg["patent_number"] == "2505223P"
+    assert agg["patent_expiry_date"] == "2032-11-21"
+
+
+def test_expired_patent_sentinel(tmp_path):
+    """INPROSUB-like patent (expiry 2025-09-14) is expired as of 2026-06-01.
+
+    patent_count must be the exact string 'all patents expired';
+    detail cells must be None.
+    """
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    # INPROSUB: single patent expired before as_of
+    store_mod.upsert_patent("02515504", "2515504P", "2005-09-14", "2010-03-01", "2025-09-14")
+
+    from app.enrichment.workbook import _aggregate_patents_latest
+    agg = _aggregate_patents_latest("02515504", as_of=_AS_OF)
+
+    assert agg["patent_count"] == "all patents expired", (
+        f"Expected sentinel 'all patents expired', got {agg['patent_count']!r}"
+    )
+    assert agg["patent_number"] is None, "patent_number must be None when all expired"
+    assert agg["patent_grant_date"] is None, "patent_grant_date must be None when all expired"
+    assert agg["patent_expiry_date"] is None, "patent_expiry_date must be None when all expired"
+
+
+def test_mixed_patents_only_active_counted(tmp_path):
+    """Two patents: one expired, one active → count = 1, details from the active one."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    store_mod.upsert_patent("02334992", "EXPIRED1", "2000-01-01", "2005-01-01", "2020-01-01")
+    store_mod.upsert_patent("02334992", "ACTIVE1",  "2010-01-01", "2016-01-01", "2030-01-01")
+
+    from app.enrichment.workbook import _aggregate_patents_latest
+    agg = _aggregate_patents_latest("02334992", as_of=_AS_OF)
+
+    assert agg["patent_count"] == 1
+    assert agg["patent_number"] == "ACTIVE1"
+    assert agg["patent_expiry_date"] == "2030-01-01"
+
+
+def test_no_patents_stored_gives_zero(tmp_path):
+    """DIN with no patents stored → patent_count = 0 (not the expired sentinel)."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import _aggregate_patents_latest
+    agg = _aggregate_patents_latest("00000000", as_of=_AS_OF)
+
+    assert agg["patent_count"] == 0, (
+        "No-patent DIN must have count 0, not the 'all patents expired' sentinel"
+    )
+    assert agg["patent_number"] is None
+
+
+def test_expired_patents_in_sheet1(tmp_path):
+    """Sheet 1 shows the 'all patents expired' sentinel for an expired DIN."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+    store_mod.upsert_patent("02515504", "2515504P", "2005-09-14", "2010-03-01", "2025-09-14")
+
+    from app.enrichment.workbook import build_sheet1
+
+    response = _make_response(
+        dpd_records=[DrugRecord(
+            source="DPD", din="02515504", brand_name="INPROSUB",
+            company="AnyPharma", ingredient="progesterone",
+            strength="25 MG", dosage_form="Solution",
+        )],
+    )
+    df = build_sheet1(response, as_of=_AS_OF)
+    row = df[df["din"] == "02515504"].iloc[0]
+
+    assert row["patent_count"] == "all patents expired"
+    assert row["patent_number"] is None or str(row["patent_number"]) in ("None", "nan", "")
+    assert row["patent_expiry_date"] is None or str(row["patent_expiry_date"]) in ("None", "nan", "")
+
+
+# ── Fix 2: Solution strength normalization ───────────────────────────────────
+
+def test_solution_strength_normalized():
+    """'25 MG' with dosage_form 'Solution' → '25 MG/ML' (INPROSUB anchor)."""
+    from app.enrichment.workbook import _normalize_solution_strength
+    assert _normalize_solution_strength("25 MG", "Solution") == "25 MG/ML"
+
+
+def test_solution_strength_already_has_denominator():
+    """Strengths that already carry a denominator are left unchanged."""
+    from app.enrichment.workbook import _normalize_solution_strength
+    assert _normalize_solution_strength("25 MG/ML", "Solution") == "25 MG/ML"
+    assert _normalize_solution_strength("10 MG/5 ML", "Solution") == "10 MG/5 ML"
+
+
+def test_non_solution_strength_unchanged():
+    """Non-Solution forms are not touched regardless of unit."""
+    from app.enrichment.workbook import _normalize_solution_strength
+    assert _normalize_solution_strength("25 MG", "Capsule") == "25 MG"
+    assert _normalize_solution_strength("25 MG", "Suspension") == "25 MG"
+    assert _normalize_solution_strength("25 MG", "Gel") == "25 MG"
+
+
+def test_inprosub_solution_strength_in_sheet1(tmp_path):
+    """INPROSUB row: form='Solution', raw strength='25 MG' → sheet shows '25 MG/ML'."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import build_sheet1
+
+    response = _make_response(
+        dpd_records=[DrugRecord(
+            source="DPD", din="02515504", brand_name="INPROSUB",
+            company="AnyPharma", ingredient="progesterone",
+            strength="25 MG", dosage_form="Solution",
+        )],
+    )
+    df = build_sheet1(response)
+    row = df[df["din"] == "02515504"].iloc[0]
+    assert row["strength"] == "25 MG/ML", (
+        f"INPROSUB Solution strength should be '25 MG/ML', got {row['strength']!r}"
+    )
+
+
+def test_capsule_strength_unchanged_in_sheet1(tmp_path):
+    """A Capsule row with '50 MG' must not have /ML appended."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import build_sheet1
+
+    response = _make_response(
+        dpd_records=[DrugRecord(
+            source="DPD", din="02498014", brand_name="PIQRAY",
+            company="Novartis", ingredient="alpelisib",
+            strength="50 MG", dosage_form="Tablet",
+        )],
+    )
+    df = build_sheet1(response)
+    row = df[df["din"] == "02498014"].iloc[0]
+    assert row["strength"] == "50 MG", (
+        f"Tablet strength must not be modified, got {row['strength']!r}"
+    )
+
+
+# ── Fix 3: DIN-first column order + DIN / SKU Name headers ──────────────────
+
+def test_din_is_first_column(tmp_path):
+    """DIN must be the first column in Sheet 1."""
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import build_sheet1
+
+    response = _make_response(dpd_records=[_dpd("02498014")])
+    df = build_sheet1(response)
+    assert df.columns[0] == "din", (
+        f"First column must be 'din', got {df.columns[0]!r}"
+    )
+
+
+def test_xlsx_din_header_is_all_caps(tmp_path):
+    """The 'din' column must appear as 'DIN' (all caps) in the XLSX header row."""
+    import openpyxl
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import build_workbook
+
+    response = _make_response(dpd_records=[_dpd("02498014")], noc_records=[_noc("02498014")])
+    xlsx = build_workbook(response)
+    wb = openpyxl.load_workbook(io.BytesIO(xlsx))
+    ws = wb["DPD + NOC + Patents"]
+    headers = [cell.value for cell in ws[1]]
+    assert "DIN" in headers, f"Expected 'DIN' header in XLSX; got headers: {headers}"
+    assert "Din" not in headers, "Old title-cased 'Din' must not appear"
+
+
+def test_xlsx_ingredient_header_is_sku_name(tmp_path):
+    """The 'ingredient' column must appear as 'SKU Name' in the XLSX header row."""
+    import openpyxl
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import build_workbook
+
+    response = _make_response(dpd_records=[_dpd("02498014")], noc_records=[_noc("02498014")])
+    xlsx = build_workbook(response)
+    wb = openpyxl.load_workbook(io.BytesIO(xlsx))
+    ws = wb["DPD + NOC + Patents"]
+    headers = [cell.value for cell in ws[1]]
+    assert "SKU Name" in headers, f"Expected 'SKU Name' header in XLSX; got: {headers}"
+    assert "Ingredient" not in headers, "Old 'Ingredient' header must not appear"
+
+
+def test_xlsx_din_is_first_column_in_file(tmp_path):
+    """Column A in the XLSX must be DIN."""
+    import openpyxl
+    import app.enrichment.store as store_mod
+    store_mod.reset_for_testing(str(tmp_path / "enrich.db"))
+
+    from app.enrichment.workbook import build_workbook
+
+    response = _make_response(dpd_records=[_dpd("02498014")], noc_records=[_noc("02498014")])
+    xlsx = build_workbook(response)
+    wb = openpyxl.load_workbook(io.BytesIO(xlsx))
+    ws = wb["DPD + NOC + Patents"]
+    col_a_header = ws.cell(row=1, column=1).value
+    assert col_a_header == "DIN", (
+        f"Column A header must be 'DIN', got {col_a_header!r}"
+    )
+
+
+# ── Fix 4: NOC column alignment (DEPO-PROVERA anchor) ───────────────────────
+
+def _noc_multi(din: str, date: str, reason: Optional[str], sub_type: str = "NDS") -> DrugRecord:
+    return DrugRecord(
+        source="NOC", din=din,
+        brand_name="BRAND", company="Pfizer",
+        ingredient="medroxyprogesterone",
+        source_specific={
+            "noc_date": date,
+            "submission_type": sub_type,
+            "submission_class": "New",
+            "reason_for_supplement": reason,
+            "therapeutic_class": "Hormones",
+        },
+    )
+
+
+def test_depo_provera_reason_for_supplement_aligned():
+    """DEPO-PROVERA anchor: 3 NOC dates, first reason blank, next two 'MANUFACTURER NAME CHANGE'.
+
+    After the fix, reason_for_supplement must have 3 lines (not 2),
+    aligned with noc_date, submission_class, etc.
+    """
+    from app.enrichment.workbook import build_sheet1
+
+    noc_records = [
+        _noc_multi("00030848", "1997-05-29", None),                          # original → blank reason
+        _noc_multi("00030848", "2001-02-13", "MANUFACTURER NAME CHANGE"),
+        _noc_multi("00030848", "2003-09-15", "MANUFACTURER NAME CHANGE"),
+    ]
+    response = _make_response(
+        dpd_records=[DrugRecord(
+            source="DPD", din="00030848", brand_name="DEPO-PROVERA",
+            company="Pfizer", ingredient="medroxyprogesterone acetate",
+            strength="150 MG/ML", dosage_form="Suspension",
+        )],
+        noc_records=noc_records,
+    )
+    df = build_sheet1(response)
+    row = df[df["din"] == "00030848"].iloc[0]
+
+    noc_date_lines = str(row["noc_date"]).split("\n")
+    reason_lines = str(row["reason_for_supplement"]).split("\n")
+    sub_class_lines = str(row["submission_class"]).split("\n")
+
+    # All three NOC columns must have the same line count.
+    assert len(noc_date_lines) == 3, (
+        f"noc_date should have 3 lines, got {len(noc_date_lines)}: {noc_date_lines!r}"
+    )
+    assert len(reason_lines) == len(noc_date_lines), (
+        f"reason_for_supplement line count ({len(reason_lines)}) must match "
+        f"noc_date line count ({len(noc_date_lines)})"
+    )
+    assert len(sub_class_lines) == len(noc_date_lines), (
+        f"submission_class line count ({len(sub_class_lines)}) must match "
+        f"noc_date line count ({len(noc_date_lines)})"
+    )
+
+    # Line 1 reason must be blank (original approval has no supplement reason).
+    assert reason_lines[0] == "", (
+        f"Line 1 of reason_for_supplement must be blank (original NOC), got {reason_lines[0]!r}"
+    )
+    # Lines 2 and 3 must carry the reason.
+    assert reason_lines[1] == "MANUFACTURER NAME CHANGE"
+    assert reason_lines[2] == "MANUFACTURER NAME CHANGE"
+
+    # Dates must align correctly.
+    assert "1997-05-29" in noc_date_lines[0]
+    assert "2001-02-13" in noc_date_lines[1]
+    assert "2003-09-15" in noc_date_lines[2]
+
+
+def test_noc_column_line_counts_match_multi_noc():
+    """For any multi-NOC DIN, all five per-NOC columns must have equal line counts."""
+    from app.enrichment.workbook import build_sheet1
+
+    noc_cols = [
+        "noc_date", "reason_for_supplement", "submission_class",
+        "noc_submission_type", "noc_therapeutic_class",
+    ]
+
+    # Three NOC records: mixed blank/non-blank across different fields
+    noc_records = [
+        _noc_multi("02498014", "2019-01-01", None,                     "NDS"),
+        _noc_multi("02498014", "2021-06-01", "LABEL UPDATE",           "NDS"),
+        _noc_multi("02498014", "2023-03-15", "MANUFACTURER NAME CHANGE", "NDS"),
+    ]
+    response = _make_response(
+        dpd_records=[_dpd("02498014")],
+        noc_records=noc_records,
+    )
+    df = build_sheet1(response)
+    row = df[df["din"] == "02498014"].iloc[0]
+
+    line_counts = {
+        col: len(str(row[col]).split("\n")) if row[col] is not None else 0
+        for col in noc_cols
+        if col in df.columns and row[col] is not None
+    }
+
+    # All columns with data must have the same line count.
+    unique_counts = set(line_counts.values())
+    assert len(unique_counts) == 1, (
+        f"All per-NOC columns must have equal line counts; got {line_counts}"
     )

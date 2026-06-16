@@ -368,10 +368,35 @@ async def run_export_job(
             ),
         })
 
-        xlsx_bytes, sheet1_df, sheet2_df = build_workbook_multiproduct(
+        # Load IQVIA data from the server-side store.
+        # Falls back to the persisted key ("_persisted") so IQVIA data survives server restarts.
+        iqvia_df = None
+        from app.main import _IQVIA_STORE, _IQVIA_PERSIST_KEY  # type: ignore[attr-defined]
+        if job.iqvia_token:
+            iqvia_df = _IQVIA_STORE.get(job.iqvia_token)
+            if iqvia_df is None:
+                # Session token expired (e.g. server reloaded) — try persisted upload
+                iqvia_df = _IQVIA_STORE.get(_IQVIA_PERSIST_KEY)
+        else:
+            # No token sent; use persisted upload if one exists
+            iqvia_df = _IQVIA_STORE.get(_IQVIA_PERSIST_KEY)
+        if iqvia_df is not None:
+            await emit(job, {
+                "stage": "Workbook", "done": 0, "total": 1,
+                "pct": _overall_pct("Workbook", 0, 1),
+                "elapsed_s": elapsed(), "eta_s": None,
+                "log": (
+                    f"IQVIA data loaded ({len(iqvia_df)} collapsed groups) — "
+                    "will match to DINs and append metric columns"
+                ),
+            })
+
+        xlsx_bytes, sheet1_df, sheet2_df, recon_df = build_workbook_multiproduct(
             product_results,
             source_errors=all_error_sources if allow_partial and all_error_sources else None,
             dp_table=dp_table,
+            iqvia_df=iqvia_df,
+            debug_iqvia_rows=True,  # temporary: remove before final release
         )
 
         # Snapshot combined flat DataFrames so the dashboard can display them.
@@ -384,6 +409,24 @@ async def run_export_job(
         job.sheet2_records = (
             sheet2_df.where(pd.notna(sheet2_df), None).to_dict("records")
         )
+        if not recon_df.empty:
+            job.recon_columns = list(recon_df.columns)
+            job.recon_records = (
+                recon_df.where(pd.notna(recon_df), None).to_dict("records")
+            )
+            matched = sum(1 for r in job.recon_records if r.get("status") == "matched")
+            ambiguous = sum(1 for r in job.recon_records if r.get("status") == "ambiguous")
+            unmatched_iqvia = sum(1 for r in job.recon_records if r.get("status") == "no_din_match")
+            await emit(job, {
+                "stage": "Workbook", "done": 0, "total": 1,
+                "pct": _overall_pct("Workbook", 0, 1),
+                "elapsed_s": elapsed(), "eta_s": None,
+                "log": (
+                    f"IQVIA matching complete — {matched} matched, "
+                    f"{ambiguous} ambiguous/low-score, "
+                    f"{unmatched_iqvia} IQVIA groups with no DIN match"
+                ),
+            })
 
         fd, path = tempfile.mkstemp(suffix=".xlsx", prefix="cdn_drugs_")
         with os.fdopen(fd, "wb") as fh:

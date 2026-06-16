@@ -27,6 +27,13 @@ class JobState:
     sheet1_records: list[dict] = dataclasses.field(default_factory=list)
     sheet2_columns: list[str] = dataclasses.field(default_factory=list)
     sheet2_records: list[dict] = dataclasses.field(default_factory=list)
+    # Optional IQVIA reconciliation snapshot (set only when IQVIA data was provided).
+    recon_columns: list[str] = dataclasses.field(default_factory=list)
+    recon_records: list[dict] = dataclasses.field(default_factory=list)
+    # Token referencing the pre-parsed IQVIA DataFrame in the server-side store.
+    iqvia_token: Optional[str] = None
+    # When True, append "IQVIA Source Rows (debug)" column to Sheet 1 output.
+    debug_iqvia_rows: bool = False
 
 
 _jobs: dict[str, JobState] = {}
@@ -37,6 +44,8 @@ def create_job(
     query: str,
     field: str,
     queries: Optional[list[str]] = None,
+    iqvia_token: Optional[str] = None,
+    debug_iqvia_rows: bool = False,
 ) -> JobState:
     effective_queries = queries or [query]
     job = JobState(
@@ -44,6 +53,8 @@ def create_job(
         query=query,
         field=field,
         queries=effective_queries,
+        iqvia_token=iqvia_token,
+        debug_iqvia_rows=debug_iqvia_rows,
     )
     _jobs[job_id] = job
     return job

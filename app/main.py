@@ -4,12 +4,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import pickle
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,6 +49,24 @@ from app.cache import cache_clear_all
 from app.sources.patent_register import search_patent_register
 
 app = FastAPI(title="Zydus Drug Intelligence Platform", version="1.0.0")
+
+# ── IQVIA upload store ────────────────────────────────────────────────────────
+# Maps token → collapsed IQVIA DataFrame (one row per product group).
+# "_persisted" is a special key that survives server restarts via disk pickle.
+_IQVIA_STORE: dict[str, "pd.DataFrame"] = {}
+_IQVIA_PERSIST_KEY = "_persisted"
+_IQVIA_PERSIST_PATH = os.path.join(CACHE_DIR, "iqvia_collapsed.pkl")
+
+
+@app.on_event("startup")
+async def _load_persisted_iqvia() -> None:
+    """Auto-load the last uploaded IQVIA file from disk so it survives server restarts."""
+    if os.path.exists(_IQVIA_PERSIST_PATH):
+        try:
+            with open(_IQVIA_PERSIST_PATH, "rb") as fh:
+                _IQVIA_STORE[_IQVIA_PERSIST_KEY] = pickle.load(fh)
+        except Exception:
+            pass  # corrupt pickle — ignore; user can re-upload
 
 # CORS — lets Power BI Service, Fabric notebooks, and other browser clients call the API.
 app.add_middleware(
@@ -395,6 +414,64 @@ async def reset_all_caches() -> dict:
     return {"status": "ok", "http_rows_cleared": http_rows, "patent_rows_cleared": patent_rows, "labeling_rows_cleared": labeling_rows}
 
 
+# ── IQVIA upload ──────────────────────────────────────────────────────────────
+
+@app.post("/api/iqvia/upload")
+async def iqvia_upload(file: UploadFile = File(...)) -> dict:
+    """Upload an IQVIA Canada Excel file and return a session token.
+
+    The file is parsed immediately: the 'data' sheet is read, metric columns
+    are detected by pattern, and rows are collapsed to one per (molecule,
+    product, manufacturer, strength) by summing across channel/province/pack.
+
+    The collapsed DataFrame is stored in-process under the returned token.
+    Pass the token as ``iqvia_token`` in ``/export/start`` to attach IQVIA
+    metrics to the exported workbook.
+
+    Tokens are cleared on server restart.
+    """
+    from app.enrichment.iqvia import parse_iqvia, collapse_iqvia, detect_metric_columns
+
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(400, "File must be an Excel file (.xlsx or .xls)")
+
+    content = await file.read()
+    try:
+        raw_df = parse_iqvia(content)
+    except Exception as exc:
+        raise HTTPException(422, f"Could not parse IQVIA file: {exc}") from exc
+
+    metric_cols = detect_metric_columns(raw_df)
+    if not metric_cols:
+        raise HTTPException(
+            422,
+            "No metric columns found (expected 'Dollars MAT MM/YYYY', "
+            "'Units MAT MM/YYYY', 'Ext Units MAT MM/YYYY'). "
+            "Make sure you are uploading the 'data' sheet, not a Pivot sheet.",
+        )
+
+    collapsed = collapse_iqvia(raw_df)
+    token = uuid.uuid4().hex
+    _IQVIA_STORE[token] = collapsed
+    _IQVIA_STORE[_IQVIA_PERSIST_KEY] = collapsed
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(_IQVIA_PERSIST_PATH, "wb") as fh:
+            pickle.dump(collapsed, fh)
+    except Exception:
+        pass  # disk write failure is non-fatal; in-memory token still works
+
+    molecules = sorted(collapsed["Combined Molecule"].dropna().unique().tolist()) if "Combined Molecule" in collapsed.columns else []
+    return {
+        "token": token,
+        "raw_rows": len(raw_df),
+        "collapsed_groups": len(collapsed),
+        "metric_columns": metric_cols,
+        "molecules": molecules,
+        "status": "ok",
+    }
+
+
 # ── Async export: start / stream / result ─────────────────────────────────────
 
 class ExportStartRequest(BaseModel):
@@ -403,6 +480,8 @@ class ExportStartRequest(BaseModel):
     field: str = "ingredient"
     allow_partial: bool = False
     enable_ocr: bool = True
+    iqvia_token: Optional[str] = None  # token from /api/iqvia/upload
+    debug_iqvia_rows: bool = False     # append "IQVIA Source Rows (debug)" column to Sheet 1
 
 
 def _resolve_queries(req: ExportStartRequest) -> list[str]:
@@ -432,7 +511,11 @@ async def export_start(req: ExportStartRequest) -> dict:
     if not qs:
         raise HTTPException(400, "No query provided — set q or queries")
     job_id = uuid.uuid4().hex
-    job = create_job(job_id, qs[0], req.field, queries=qs)
+    job = create_job(
+        job_id, qs[0], req.field, queries=qs,
+        iqvia_token=req.iqvia_token,
+        debug_iqvia_rows=req.debug_iqvia_rows,
+    )
     asyncio.create_task(
         run_export_job(job, req.allow_partial, req.enable_ocr)
     )
@@ -526,13 +609,19 @@ async def export_data_json(job_id: str) -> dict:
         raise HTTPException(409, "Job still running — wait for SSE complete event")
     if job.status == "error":
         raise HTTPException(422, f"Job failed: {job.error}")
-    return {
+    result: dict = {
         "query": job.query,
         "queries": job.queries or [job.query],
         "field": job.field,
         "sheet1": {"columns": job.sheet1_columns, "records": job.sheet1_records},
         "sheet2": {"columns": job.sheet2_columns, "records": job.sheet2_records},
     }
+    if job.recon_columns:
+        result["reconciliation"] = {
+            "columns": job.recon_columns,
+            "records": job.recon_records,
+        }
+    return result
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1030,10 +1119,19 @@ _HTML_UI = """<!DOCTYPE html>
         </select>
       </div>
       <div class="field-group" style="justify-content:flex-end; gap:6px; margin-top:12px;">
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
           <button class="btn btn-primary" id="searchBtn" onclick="doSearch()">Search</button>
           <button class="btn btn-export" id="exportBtn" onclick="doExport()" disabled>⬇ Export XLSX</button>
           <button class="btn" style="background:#888;color:white;" onclick="resetAllCaches()" title="Clear all cached data and force fresh fetches from all sources">Reset cache</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
+          <label style="font-size:0.8rem;color:var(--muted);white-space:nowrap;cursor:pointer;" for="iqviaFile">
+            IQVIA file (optional):
+          </label>
+          <input type="file" id="iqviaFile" accept=".xlsx,.xls"
+            style="font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:3px 6px;background:#fff;cursor:pointer;max-width:220px;"
+            onchange="uploadIqvia(this)">
+          <span id="iqviaStatus" style="font-size:0.78rem;color:var(--muted)"></span>
         </div>
       </div>
     </div>
@@ -1065,9 +1163,11 @@ _HTML_UI = """<!DOCTYPE html>
     <div class="dash-tab-bar">
       <button class="dash-tab active" id="dashTab1" onclick="switchDashTab(1)">DPD + NOC + Patents</button>
       <button class="dash-tab" id="dashTab2" onclick="switchDashTab(2)">Generic Submissions</button>
+      <button class="dash-tab" id="dashTab3" onclick="switchDashTab(3)" style="display:none">IQVIA Reconciliation</button>
     </div>
     <div id="dashPane1"><div class="dash-table-wrap" id="dashSheet1"></div></div>
     <div id="dashPane2" style="display:none"><div class="dash-table-wrap" id="dashSheet2"></div></div>
+    <div id="dashPane3" style="display:none"><div class="dash-table-wrap" id="dashSheet3"></div></div>
   </div>
 </div>
 <footer role="contentinfo">
@@ -1459,10 +1559,12 @@ async function doExport() {
   // Start the job
   let jobId;
   try {
+    const body = { queries, field, allow_partial: false, enable_ocr: true };
+    if (_iqviaToken) body.iqvia_token = _iqviaToken;
     const resp = await fetch('/export/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ queries, field, allow_partial: false, enable_ocr: true }),
+      body: JSON.stringify(body),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -1550,8 +1652,37 @@ function _kpiCards(sheet1Records, sheet1Cols) {
 function switchDashTab(n) {
   document.getElementById('dashTab1').classList.toggle('active', n === 1);
   document.getElementById('dashTab2').classList.toggle('active', n === 2);
+  document.getElementById('dashTab3').classList.toggle('active', n === 3);
   document.getElementById('dashPane1').style.display = n === 1 ? '' : 'none';
   document.getElementById('dashPane2').style.display = n === 2 ? '' : 'none';
+  document.getElementById('dashPane3').style.display = n === 3 ? '' : 'none';
+}
+
+// ---- IQVIA upload ----
+let _iqviaToken = null;
+
+async function uploadIqvia(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('iqviaStatus');
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Uploading…';
+  _iqviaToken = null;
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/iqvia/upload', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+    _iqviaToken = data.token;
+    status.style.color = 'var(--muted)';
+    status.textContent = `✓ Loaded`;
+  } catch (e) {
+    status.style.color = 'var(--err)';
+    status.textContent = `✗ ${e.message}`;
+    _iqviaToken = null;
+  }
 }
 
 async function _loadDashboard(jobId) {
@@ -1561,6 +1692,9 @@ async function _loadDashboard(jobId) {
   document.getElementById('dashSheet1').innerHTML = '<div class="loading-msg"><div class="spinner"></div>Loading dashboard from XLSX dataset…</div>';
   document.getElementById('kpiRow').innerHTML = '';
   document.getElementById('canaryBox').textContent = '';
+  // Hide reconciliation tab until we know if data exists
+  document.getElementById('dashTab3').style.display = 'none';
+  document.getElementById('dashPane3').style.display = 'none';
 
   try {
     const resp = await fetch(`/api/export-data/${jobId}`);
@@ -1576,13 +1710,15 @@ async function _loadDashboard(jobId) {
     // Canary comparison log
     const qs = data.queries || [data.query];
     const queryStr = qs.length === 1 ? `"${data.query}"` : `${qs.length} products: ${qs.map(q => '"' + q + '"').join(', ')}`;
+    const hasIqvia = !!data.reconciliation;
     const canary = [
       `✓ Dashboard loaded from job snapshot — NO new outbound requests`,
       `  Sheet 1: ${s1.records.length} rows × ${s1.columns.length} columns`,
       `  Sheet 2: ${s2.records.length} rows × ${s2.columns.length} columns`,
+      hasIqvia ? `  IQVIA reconciliation: ${data.reconciliation.records.length} entries` : '',
       `  ${queryStr} by ${data.field}`,
       `  Columns: ${s1.columns.join(', ')}`,
-    ].join('\\n');
+    ].filter(Boolean).join('\\n');
     document.getElementById('canaryBox').textContent = canary;
 
     document.getElementById('dashMeta').textContent =
@@ -1591,6 +1727,15 @@ async function _loadDashboard(jobId) {
     // Render tables
     document.getElementById('dashSheet1').innerHTML = _dashTable(s1.columns, s1.records);
     document.getElementById('dashSheet2').innerHTML = _dashTable(s2.columns, s2.records);
+
+    // IQVIA reconciliation tab (shown only when data is available)
+    if (hasIqvia && data.reconciliation.records.length > 0) {
+      document.getElementById('dashTab3').style.display = '';
+      document.getElementById('dashSheet3').innerHTML = _dashTable(
+        data.reconciliation.columns,
+        data.reconciliation.records
+      );
+    }
 
     console.log('[Dashboard canary]', {
       sheet1_rows: s1.records.length,
