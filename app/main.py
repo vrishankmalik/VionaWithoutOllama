@@ -5,9 +5,19 @@ import asyncio
 import json
 import os
 import pickle
+import sys
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
+# Windows consoles default to cp1252, which cannot encode characters such as
+# "->"/check marks used in the export-pipeline progress prints. Force UTF-8 so
+# those print() calls don't raise UnicodeEncodeError and crash an export job.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
