@@ -30,6 +30,8 @@ app/
   jobs.py                # In-memory job state (multi-product, SSE events, dashboard snapshot)
   export_job.py          # Async multi-product export pipeline (search → patents → labeling → workbook)
   enrichment/
+    iqvia.py             # IQVIA parse (xlsx/xls/csv, both MAT date orders) + collapse + DIN match
+    iqvia_diff.py        # Quarter-over-quarter compare of two extracts → changes-only XLSX
     store.py             # SQLite enrichment store (patents + labeling, $CACHE_DIR/enrichment.db)
     patents.py           # enrich-patents: Patent.zip join + CPD date fetch
     labeling.py          # enrich-labeling: per-strength PDF field extraction (cite-or-blank)
@@ -163,6 +165,37 @@ The export UI accepts multiple ingredients (one per line or comma-separated). Ea
 - **`/export/start`** — accepts `queries: ["alpelisib", "apremilast", ...]`; each product is searched and enriched; side-by-side blocks in both sheets.
 - **Progress** — SSE stream at `/export/stream/{job_id}` gives per-stage progress (Search 0–20 %, Patents 20–50 %, Labeling 50–85 %, Workbook 85–100 %).
 - **Dashboard** — after export completes, the in-page dashboard shows KPI cards and both sheet tables; data is read from the job snapshot (`/api/export-data/{job_id}`), never re-scraped.
+
+## IQVIA Quarter-over-Quarter Compare
+
+Compare an older and a newer IQVIA Canada extract and download an Excel of **only
+what changed** since the previous quarterly pull. Page: `/iqvia-compare` (two
+upload slots + "Download Changes"). API: `POST /api/iqvia/compare` with multipart
+`old_file` + `new_file` (each `.xlsx`, `.xls`, or `.csv`).
+
+Reuses the canonical IQVIA path — `parse_iqvia` → `collapse_iqvia` (product grain:
+Combined Molecule × Product × Manufacturer × Strength, summed across
+channel/province/pack) and the matcher's `_norm_brand`/`_norm_company`/
+`_norm_strength` for the cross-file identity key (so quarter-to-quarter formatting
+jitter never masquerades as add/remove churn).
+
+- **Per-file latest-MAT resolution** (`latest_mat_metrics` in `iqvia.py`): the two
+  extracts do **not** share column names — one writes `Dollars MAT 12/2025`
+  (MM/YYYY), the other `Dollars MAT 2025/06` (YYYY/MM). The newest MAT period is
+  resolved independently inside each file; new-latest is compared to old-latest.
+- **Three signals**: NEW entrants (present in new, absent/zero in old), EXITS
+  (present in old, absent/zero in new), and MATERIAL MOVES among rows in both.
+  "Present" = any of latest Dollars/Units/Ext Units > 0.
+- **Materiality gate** (`config.IQVIA_DIFF_*`): a row is a move only when Dollars or
+  Units clears BOTH an absolute floor AND a percent floor (defaults $100k & 10%;
+  1,000 units & 10%). The %-floor strips rolling-MAT drift (which otherwise flags
+  ~80 % of shared rows); the abs-floor strips tiny-base %-explosions. Ext Units is
+  shown but is not an independent trigger (collinear with Units). Entrants/exits
+  are never thresholded. Moved rows show old → new → Δ (absolute and %); Δ% is left
+  blank when the old base is 0 (never fabricated).
+- Output XLSX: **Summary · New Entrants · Exits · Material Moves**. Fixture pair +
+  regression test: `tests/scripts/build_iqvia_diff_fixture.py`,
+  `tests/test_iqvia_diff.py`.
 
 ## Caching
 
@@ -351,6 +384,8 @@ The app is a plain Python FastAPI service. Deploy it on an Azure VM or Azure Con
 | `GET` | `/api/powerbi` | **Power BI / Fabric JSON endpoint** — search + enrich + return flat JSON |
 | `POST` | `/api/fabric/push` | Push XLSX to Azure Data Lake / OneLake |
 | `POST` | `/api/reset-labeling-cache` | Drop labeling table, forcing re-extraction |
+| `POST` | `/api/iqvia/compare` | Compare two IQVIA extracts (`old_file`+`new_file`) → changes-only XLSX |
+| `GET` | `/iqvia-compare` | IQVIA quarter-over-quarter comparison page (two upload slots) |
 
 ## Dependencies
 

@@ -91,13 +91,17 @@ _MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 
 @app.middleware("http")
 async def _limit_upload_size(request: Request, call_next):
-    if request.method == "POST" and request.url.path == "/api/iqvia/upload":
+    # /api/iqvia/compare carries TWO extracts, so it gets twice the per-file cap.
+    _upload_paths = {"/api/iqvia/upload": _MAX_UPLOAD_BYTES,
+                     "/api/iqvia/compare": 2 * _MAX_UPLOAD_BYTES}
+    limit = _upload_paths.get(request.url.path) if request.method == "POST" else None
+    if limit is not None:
         cl = request.headers.get("content-length")
-        if cl and int(cl) > _MAX_UPLOAD_BYTES:
+        if cl and int(cl) > limit:
             from fastapi.responses import JSONResponse
             return JSONResponse(
                 status_code=413,
-                content={"detail": f"File too large — maximum upload size is 100 MB."},
+                content={"detail": f"Upload too large — maximum total size is {limit // (1024 * 1024)} MB."},
             )
     return await call_next(request)
 
@@ -510,6 +514,65 @@ async def iqvia_upload(request: Request) -> dict:
     }
 
 
+# ── IQVIA quarter-over-quarter comparison ─────────────────────────────────────
+
+async def _read_compare_file(form, field_name: str, label: str) -> bytes:
+    """Pull one named file part from the compare upload form, or 400."""
+    f = form.get(field_name)
+    if f is None or not hasattr(f, "read"):
+        raise HTTPException(400, f"Missing the {label} file (form field '{field_name}').")
+    name = (getattr(f, "filename", "") or "").lower()
+    if not name.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(400, f"The {label} file must be .xlsx, .xls, or .csv (got '{name or 'unnamed'}').")
+    return await f.read()
+
+
+@app.post("/api/iqvia/compare")
+async def iqvia_compare(request: Request) -> Response:
+    """Compare an older and a newer IQVIA extract; return a changes-only XLSX.
+
+    Multipart form with two file parts: ``old_file`` and ``new_file`` (each xlsx,
+    xls, or csv).  The workbook has four sheets — Summary, New Entrants, Exits,
+    Material Moves — at the platform's canonical product grain.  Read the body
+    directly with a raised max_part_size so the two 5–30 MB extracts get through
+    Starlette's default 1 MB multipart limit.
+    """
+    from app.enrichment.iqvia_diff import compare_iqvia, build_diff_workbook
+
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" not in content_type:
+        raise HTTPException(400, "Expected a multipart/form-data upload with 'old_file' and 'new_file'.")
+
+    form = await request.form(max_files=2, max_fields=0, max_part_size=_MAX_UPLOAD_BYTES)
+    old_bytes = await _read_compare_file(form, "old_file", "older")
+    new_bytes = await _read_compare_file(form, "new_file", "newer")
+
+    try:
+        diff = compare_iqvia(old_bytes, new_bytes)
+        xlsx = build_diff_workbook(diff)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive
+        raise HTTPException(422, f"Could not compare IQVIA files: {exc}") from exc
+
+    fname = f"iqvia_changes_{_period_tag(diff.old_period)}_to_{_period_tag(diff.new_period)}.xlsx"
+    return Response(
+        content=xlsx,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+def _period_tag(period) -> str:
+    """'YYYY-MM' tag for filenames, or 'NA'."""
+    return f"{period[0]}-{period[1]:02d}" if period else "NA"
+
+
+@app.get("/iqvia-compare", response_class=HTMLResponse)
+async def iqvia_compare_page() -> HTMLResponse:
+    return HTMLResponse(content=_IQVIA_COMPARE_HTML)
+
+
 # ── Async export: start / stream / result ─────────────────────────────────────
 
 class ExportStartRequest(BaseModel):
@@ -696,6 +759,129 @@ async def export_data_json(job_id: str) -> dict:
 @app.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
     return HTMLResponse(content=_HTML_UI)
+
+
+# ── Embedded IQVIA comparison page ─────────────────────────────────────────────
+_IQVIA_COMPARE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IQVIA Compare · Zydus Drug Intelligence Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Exo:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --primary:#aa55a0; --primary-dark:#7d3b75; --text:#2a2a33; --muted:#6b6b78;
+    --border:#e2dce0; --bg:#faf7f9; --card:#fff; --ok:#2e9e6b; --warn:#c47f17;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:"Inter",system-ui,sans-serif; color:var(--text); background:var(--bg); margin:0; }
+  .site-nav { display:flex; align-items:center; gap:14px; padding:10px 28px; background:var(--primary-dark); color:#fff; font-size:0.86rem; }
+  .site-nav a { color:#f4e8f2; text-decoration:none; }
+  .site-nav a:hover { text-decoration:underline; }
+  .site-nav-brand { font-family:"Exo",sans-serif; font-weight:700; font-size:1.05rem; }
+  .site-nav-sub { font-size:0.7rem; opacity:.75; margin-left:6px; }
+  .site-nav-divider { width:1px; height:18px; background:rgba(255,255,255,.3); }
+  header { padding:26px 28px 10px; }
+  header h1 { font-family:"Exo",sans-serif; color:var(--primary-dark); margin:2px 0 4px; font-size:1.7rem; }
+  header p { color:var(--muted); margin:0; font-size:0.9rem; max-width:760px; }
+  .container { max-width:880px; margin:18px auto 60px; padding:0 28px; }
+  .card { background:var(--card); border:1px solid var(--border); border-top:3px solid var(--primary); border-radius:5px; padding:22px 24px; box-shadow:0 1px 3px rgba(170,85,160,.08); }
+  .slots { display:flex; gap:20px; flex-wrap:wrap; }
+  .slot { flex:1; min-width:260px; border:1px dashed var(--border); border-radius:5px; padding:16px; background:#fdfbfd; }
+  .slot h3 { margin:0 0 4px; font-size:0.96rem; color:var(--primary-dark); font-family:"Exo",sans-serif; }
+  .slot p { margin:0 0 11px; font-size:0.76rem; color:var(--muted); }
+  .slot input[type=file] { font-size:0.8rem; border:1px solid var(--border); border-radius:3px; padding:6px; background:#fff; width:100%; cursor:pointer; }
+  .actions { margin-top:20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .btn { font-family:inherit; font-size:0.92rem; font-weight:600; border:none; border-radius:4px; padding:11px 22px; cursor:pointer; }
+  .btn-primary { background:var(--primary); color:#fff; }
+  .btn-primary:disabled { background:#c9b7c6; cursor:not-allowed; }
+  #status { font-size:0.84rem; color:var(--muted); min-height:1.2em; }
+  #status.err { color:#b3261e; }
+  #status.ok { color:var(--ok); }
+  .note { margin-top:18px; font-size:0.78rem; color:var(--muted); line-height:1.55; border-top:1px solid var(--border); padding-top:14px; }
+  .note b { color:var(--text); }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--primary); border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<nav class="site-nav" role="navigation">
+  <span class="site-nav-brand">Zydus</span><span class="site-nav-sub">Dedicated To Life</span>
+  <span class="site-nav-divider"></span>
+  <a href="/">&larr; Search Platform</a>
+</nav>
+<header>
+  <h1>IQVIA Quarter-over-Quarter Compare</h1>
+  <p>Upload last quarter's IQVIA Canada extract and this quarter's, then download an Excel of <b>only what changed</b> &mdash; new entrants, exits, and material moves at the product grain. The latest MAT period is resolved inside each file independently, so the two files need not share column names or date formats (.xlsx and .csv both accepted).</p>
+</header>
+<div class="container">
+  <div class="card">
+    <div class="slots">
+      <div class="slot">
+        <h3>1 · Older extract</h3>
+        <p>The previous pull (e.g. last quarter).</p>
+        <input type="file" id="oldFile" accept=".xlsx,.xls,.csv" onchange="refresh()"/>
+      </div>
+      <div class="slot">
+        <h3>2 · Newer extract</h3>
+        <p>The current pull (e.g. this quarter).</p>
+        <input type="file" id="newFile" accept=".xlsx,.xls,.csv" onchange="refresh()"/>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="goBtn" onclick="runCompare()" disabled>⬇ Download Changes</button>
+      <span id="status"></span>
+    </div>
+    <div class="note">
+      <b>What counts as a change?</b> A MAT total drifts on nearly every row every period, so an exact-difference diff is noise.
+      A product is reported as a <b>material move</b> only when Dollars or Units shifts by both an absolute floor and a percent floor;
+      <b>entrants</b> (newly on market) and <b>exits</b> (gone) are always shown. Each moved row shows old&nbsp;&rarr;&nbsp;new&nbsp;&rarr;&nbsp;&Delta;&nbsp;(absolute and %).
+    </div>
+  </div>
+</div>
+<script>
+function refresh() {
+  const ok = document.getElementById('oldFile').files.length && document.getElementById('newFile').files.length;
+  document.getElementById('goBtn').disabled = !ok;
+}
+async function runCompare() {
+  const oldF = document.getElementById('oldFile').files[0];
+  const newF = document.getElementById('newFile').files[0];
+  const btn = document.getElementById('goBtn');
+  const status = document.getElementById('status');
+  status.className = ''; status.innerHTML = '<span class="spinner"></span>Comparing… (large files take a moment)';
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('old_file', oldF);
+  fd.append('new_file', newF);
+  try {
+    const resp = await fetch('/api/iqvia/compare', { method:'POST', body:fd });
+    if (!resp.ok) {
+      let msg = 'HTTP ' + resp.status;
+      try { const j = await resp.json(); if (j.detail) msg = j.detail; } catch (e) {}
+      throw new Error(msg);
+    }
+    const blob = await resp.blob();
+    let fname = 'iqvia_changes.xlsx';
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    if (m) fname = m[1];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+    status.className = 'ok'; status.textContent = '✓ Downloaded ' + fname;
+  } catch (err) {
+    status.className = 'err'; status.textContent = '✗ ' + err.message;
+  } finally {
+    btn.disabled = false; refresh();
+  }
+}
+</script>
+</body>
+</html>"""
 
 
 # ── Embedded single-page UI ────────────────────────────────────────────────────
@@ -1156,9 +1342,11 @@ _HTML_UI = """<!DOCTYPE html>
     <span class="site-nav-sub">Dedicated To Life</span>
   </div>
   <span class="site-nav-divider"></span>
-  <a class="site-nav-link" href="https://health-products.canada.ca/drug-product-database/" target="_blank" rel="noopener">DPD</a>
-  <a class="site-nav-link" href="https://health-products.canada.ca/noc/" target="_blank" rel="noopener">NOC</a>
+  <a class="site-nav-link" href="https://health-products.canada.ca/dpd-bdpp/" target="_blank" rel="noopener">DPD</a>
+  <a class="site-nav-link" href="https://health-products.canada.ca/noc-ac/" target="_blank" rel="noopener">NOC</a>
   <a class="site-nav-link" href="https://pr-rdb.hc-sc.gc.ca/pr-rdb/" target="_blank" rel="noopener">Patent Register</a>
+  <span class="site-nav-divider"></span>
+  <a class="site-nav-link" href="/iqvia-compare">IQVIA Compare</a>
 </nav>
 <header role="banner">
   <div class="header-brand-row">

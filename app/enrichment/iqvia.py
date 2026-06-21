@@ -108,11 +108,19 @@ _NEVER_MARKETED_STATUSES = {"approved", "cancelled pre market"}
 
 # ── Regex helpers ─────────────────────────────────────────────────────────────
 
-# Detects IQVIA metric column names: "Dollars MAT 12/2025", "Units MAT 12/2024", etc.
+# Detects IQVIA metric column names.  The MAT period is written either MM/YYYY
+# ("Dollars MAT 12/2025") or YYYY/MM ("Dollars MAT 2025/06") — two real extracts
+# disagree on the order, so both are accepted.  The period itself is parsed (not
+# assumed by column name) via _parse_mat_period below.
 _METRIC_COL_RE = re.compile(
-    r"^(Dollars|Units|Ext\s+Units)\s+MAT\s+\d{2}/\d{4}$",
+    r"^(Dollars|Units|Ext\s+Units)\s+MAT\s+(?:\d{2}/\d{4}|\d{4}/\d{2})$",
     re.IGNORECASE,
 )
+
+# Pulls the MM/YYYY or YYYY/MM token off the end of a metric column name.
+_MAT_PERIOD_RE = re.compile(r"(\d{2}/\d{4}|\d{4}/\d{2})$")
+# Pulls the metric type (Dollars / Units / Ext Units) off the front.
+_MAT_TYPE_RE = re.compile(r"^(Dollars|Units|Ext\s+Units)\s+MAT\b", re.IGNORECASE)
 
 # Concentration denominator to strip: /ML, /G, /L (but NOT /MG which is a combo separator)
 _CONC_DENOM_RE = re.compile(r"\s*/\s*(ml|g|l)\s*$", re.IGNORECASE)
@@ -374,30 +382,66 @@ def _is_generic_brand(brand_norm: str, molecule: str, extra: frozenset = frozens
 
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
-def parse_iqvia(file_bytes: bytes) -> pd.DataFrame:
-    """Read the 'data' sheet from an IQVIA Excel export.
+def _pick_data_sheet(xls: "pd.ExcelFile") -> str:
+    """Choose the real data sheet from a multi-sheet IQVIA workbook.
 
-    Returns the raw DataFrame (one row per channel × province × pack).
-    Header row is assumed to be row 1 (0-indexed row 0); data from row 2.
-
-    Metric cells containing '-' or blank are converted to 0.
-
-    A hidden ``_excel_row`` column is added recording the 1-based Excel row
-    number for each data row (header=row 1, first data row=row 2).  This is
-    used by collapse_iqvia() to produce provenance strings for the debug column.
+    IQVIA xlsx exports sometimes lead with a "Pivot" sheet of formulas before the
+    actual "data" sheet — picking the first sheet would read the pivot.  Selection:
+      1. a sheet literally named "data" (case-insensitive) wins outright;
+      2. otherwise the sheet whose header carries the most IQVIA metric columns
+         (the Pivot sheet has none), falling back to the first sheet.
     """
-    # keep_default_na=False is critical: pandas otherwise converts "N/A", "NA",
-    # "NULL", "#N/A" etc. to NaN at read time, which would then be indistinguishable
-    # from a truly empty cell and silently zeroed. Keeping them as literal strings
-    # lets the metric parser below decide (true blanks → 0; everything else → loud
-    # error) instead of losing real sales to pandas' NA inference.
-    df = pd.read_excel(
-        io.BytesIO(file_bytes),
-        sheet_name="data",
-        header=0,
-        dtype=str,
-        keep_default_na=False,
-    )
+    names = list(xls.sheet_names)
+    for n in names:
+        if str(n).strip().lower() == "data":
+            return n
+    best, best_score = names[0], -1
+    for n in names:
+        head = pd.read_excel(xls, sheet_name=n, header=0, nrows=0, dtype=str)
+        score = sum(1 for c in head.columns if _METRIC_COL_RE.match(str(c).strip()))
+        if score > best_score:
+            best, best_score = n, score
+    return best
+
+
+def _read_iqvia_table(file_bytes: bytes) -> pd.DataFrame:
+    """Read the raw IQVIA data table from xlsx, xls, or CSV bytes (all columns str).
+
+    File type is sniffed from the leading bytes so callers do not have to pass a
+    filename: ``PK\\x03\\x04`` → xlsx (zip), ``\\xd0\\xcf\\x11\\xe0`` → legacy xls
+    (OLE2), anything else → CSV/text.  CSV is decoded utf-8-sig to swallow a BOM.
+
+    keep_default_na=False is critical for both formats: pandas otherwise converts
+    "N/A", "NA", "NULL", "#N/A" etc. to NaN at read time, indistinguishable from a
+    truly empty cell and silently zeroed.  Keeping them as literal strings lets the
+    metric parser decide (true blanks → 0; everything else → loud error) instead of
+    losing real sales to pandas' NA inference.
+    """
+    head = file_bytes[:8]
+    if head[:4] == b"PK\x03\x04" or head[:4] == b"\xd0\xcf\x11\xe0":
+        xls = pd.ExcelFile(io.BytesIO(file_bytes))
+        sheet = _pick_data_sheet(xls)
+        return pd.read_excel(xls, sheet_name=sheet, header=0, dtype=str, keep_default_na=False)
+    text = file_bytes.decode("utf-8-sig", errors="replace")
+    return pd.read_csv(io.StringIO(text), header=0, dtype=str, keep_default_na=False)
+
+
+def parse_iqvia(file_bytes: bytes) -> pd.DataFrame:
+    """Read the raw data table from an IQVIA Canada export (xlsx, xls, or CSV).
+
+    Returns the raw DataFrame (one row per channel × province × pack).  For xlsx
+    the real data sheet is selected (the Pivot sheet is skipped — see
+    _pick_data_sheet); for CSV the single table is read.  Header row is row 1
+    (0-indexed row 0); data from row 2.
+
+    Metric cells containing '-' or blank are converted to 0.  Metric columns are
+    detected by pattern, so MAT periods written either MM/YYYY or YYYY/MM both work.
+
+    A hidden ``_excel_row`` column is added recording the 1-based source row number
+    for each data row (header=row 1, first data row=row 2).  This is used by
+    collapse_iqvia() to produce provenance strings for the debug column.
+    """
+    df = _read_iqvia_table(file_bytes)
     df.columns = [str(c).strip() for c in df.columns]
 
     # Excel row 1 = header; data rows start at Excel row 2 (pandas index 0).
@@ -437,6 +481,54 @@ def parse_iqvia(file_bytes: bytes) -> pd.DataFrame:
 def detect_metric_columns(df: pd.DataFrame) -> list[str]:
     """Return metric column names in the order they appear."""
     return [c for c in df.columns if _METRIC_COL_RE.match(c)]
+
+
+def _parse_mat_period(col: str) -> Optional[tuple[int, int]]:
+    """Return (year, month) for a metric column, or None if it has no MAT period.
+
+    Handles both orderings: 'Dollars MAT 12/2025' (MM/YYYY) and
+    'Dollars MAT 2025/06' (YYYY/MM).  The four-digit field is the year wherever it
+    sits, so the two formats resolve to the same (year, month) tuple.
+    """
+    m = _MAT_PERIOD_RE.search(str(col).strip())
+    if not m:
+        return None
+    a, b = m.group(1).split("/")
+    year, month = (int(a), int(b)) if len(a) == 4 else (int(b), int(a))
+    if not (1 <= month <= 12):
+        return None
+    return (year, month)
+
+
+def _metric_type(col: str) -> Optional[str]:
+    """Return the canonical metric key ('dollars' | 'units' | 'ext_units') or None."""
+    m = _MAT_TYPE_RE.match(str(col).strip())
+    if not m:
+        return None
+    t = re.sub(r"\s+", " ", m.group(1)).strip().lower()
+    return "ext_units" if t.startswith("ext") else t
+
+
+def latest_mat_metrics(metric_cols: list[str]) -> tuple[Optional[tuple[int, int]], dict[str, str]]:
+    """Resolve the latest MAT period in ONE file and map its three metric types.
+
+    Date labels vary in both format and value between extracts, so the latest
+    period must be resolved within each file independently (never assume two files'
+    columns align by name).  Returns ``(period, {metric_key: column_name})`` where
+    period is (year, month) and metric_key is dollars/units/ext_units.  The map may
+    be partial if a metric type is absent for the latest period.  Returns
+    ``(None, {})`` when no dated metric columns exist.
+    """
+    by_period: dict[tuple[int, int], dict[str, str]] = {}
+    for c in metric_cols:
+        period = _parse_mat_period(c)
+        mtype = _metric_type(c)
+        if period is not None and mtype is not None:
+            by_period.setdefault(period, {})[mtype] = c
+    if not by_period:
+        return None, {}
+    latest = max(by_period)
+    return latest, by_period[latest]
 
 
 # ── Collapsing ────────────────────────────────────────────────────────────────

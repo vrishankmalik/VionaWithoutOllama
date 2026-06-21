@@ -52,6 +52,17 @@ PATENT_STORE_TTL   = int(os.getenv("PATENT_STORE_TTL",   str(4 * 60 * 60)))   # 
 # (1/223 ≈ 0.45%) while preserving columns with meaningful coverage (≥5 rows ≈ 2.2%).
 WORKBOOK_MIN_FILL_RATE = float(os.getenv("WORKBOOK_MIN_FILL_RATE", "0.02"))
 
+# ── IQVIA quarter-over-quarter comparison thresholds ──────────────────────────
+# A MAT (Moving Annual Total) drifts on nearly every row every period, so an
+# "any metric differs" diff flags ~80% of shared rows.  A move is reported only
+# when it clears BOTH an absolute floor AND a percent floor on at least one
+# genuinely independent metric (Dollars or Units).  The percent floor removes
+# rolling-total drift; the absolute floor removes tiny-base percent explosions.
+# Entrants/exits are never thresholded — appearing/disappearing is always material.
+IQVIA_DIFF_DOLLARS_ABS = float(os.getenv("IQVIA_DIFF_DOLLARS_ABS", "100000"))  # $100k
+IQVIA_DIFF_UNITS_ABS   = float(os.getenv("IQVIA_DIFF_UNITS_ABS",   "1000"))    # 1,000 units
+IQVIA_DIFF_PCT         = float(os.getenv("IQVIA_DIFF_PCT",         "0.10"))    # 10%
+
 # ── Integration: CORS ─────────────────────────────────────────────────────────
 # Comma-separated list of allowed origins for CORS.  Default "*" allows Power BI
 # Service, Fabric notebooks, and any other browser-based consumer to call the API.
