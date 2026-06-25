@@ -1,0 +1,4442 @@
+{
+  "register_row_count": 308,
+  "universe_record_count": 13550,
+  "matched": [
+    {
+      "din": "02284863",
+      "ingredient": "ALGLUCOSIDASE ALFA 50 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-11-12"
+    },
+    {
+      "din": "02397412",
+      "ingredient": "IVACAFTOR 150 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-21"
+    },
+    {
+      "din": "02442612",
+      "ingredient": "IVACAFTOR 50 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "GRANULES",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-21"
+    },
+    {
+      "din": "02442620",
+      "ingredient": "IVACAFTOR 75 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "GRANULES",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-21"
+    },
+    {
+      "din": "02448254",
+      "ingredient": "TAPINAROF 1 %",
+      "company": "ORGANON CANADA INC.",
+      "dosage_form": "CREAM",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-04-04"
+    },
+    {
+      "din": "02451441",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT) 250 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "KIT; POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02451468",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT) 500 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02451476",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT) 1000 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "KIT; POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02451484",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT) 2000 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02451492",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT) 3000 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02469596",
+      "ingredient": "SEBELIPASE ALFA 2 MG",
+      "company": "ALEXION PHARMA GMBH",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-12-15"
+    },
+    {
+      "din": "02469723",
+      "ingredient": "AVELUMAB 20 MG",
+      "company": "EMD SERONO, A DIVISION OF EMD INC., CANADA",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-12-18"
+    },
+    {
+      "din": "02470187",
+      "ingredient": "COAGULATION FACTOR IX (RECOMBINANT), PEGYLATED 500 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-29"
+    },
+    {
+      "din": "02470268",
+      "ingredient": "COAGULATION FACTOR IX (RECOMBINANT), PEGYLATED 1000 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-29"
+    },
+    {
+      "din": "02470276",
+      "ingredient": "COAGULATION FACTOR IX (RECOMBINANT), PEGYLATED 2000 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-29"
+    },
+    {
+      "din": "02470365",
+      "ingredient": "DUPILUMAB 300 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-30"
+    },
+    {
+      "din": "02473232",
+      "ingredient": "BENRALIZUMAB 30 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-02-22"
+    },
+    {
+      "din": "02476991",
+      "ingredient": "CRISABOROLE 2 %",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "OINTMENT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-06-07"
+    },
+    {
+      "din": "02478080",
+      "ingredient": "IVACAFTOR 150 MG; IVACAFTOR 150 MG; TEZACAFTOR 100 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-06-27"
+    },
+    {
+      "din": "02478374",
+      "ingredient": "APALUTAMIDE 60 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-07-03"
+    },
+    {
+      "din": "02478579",
+      "ingredient": "BICTEGRAVIR (BICTEGRAVIR SODIUM) 50 MG; EMTRICITABINE 200 MG; TENOFOVIR ALAFENAMIDE (TENOFOVIR ALAFENAMIDE HEMIFUMARATE) 25 MG",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-07-10"
+    },
+    {
+      "din": "02478765",
+      "ingredient": "HEMIN 268 MG",
+      "company": "RECORDATI RARE DISEASES CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-07-13"
+    },
+    {
+      "din": "02479613",
+      "ingredient": "ERENUMAB 70 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-01"
+    },
+    {
+      "din": "02479621",
+      "ingredient": "EMICIZUMAB 30 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-02"
+    },
+    {
+      "din": "02479648",
+      "ingredient": "EMICIZUMAB 60 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-02"
+    },
+    {
+      "din": "02479656",
+      "ingredient": "EMICIZUMAB 105 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-02"
+    },
+    {
+      "din": "02479664",
+      "ingredient": "EMICIZUMAB 150 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-02"
+    },
+    {
+      "din": "02480018",
+      "ingredient": "BARICITINIB 2 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-17"
+    },
+    {
+      "din": "02480514",
+      "ingredient": "TISAGENLECLEUCEL 600000000 CELLS",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-05"
+    },
+    {
+      "din": "02480522",
+      "ingredient": "DALBAVANCIN (DALBAVANCIN HYDROCHLORIDE) 500 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-04"
+    },
+    {
+      "din": "02480824",
+      "ingredient": "CABOZANTINIB (CABOZANTINIB MALATE) 20 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-14"
+    },
+    {
+      "din": "02480832",
+      "ingredient": "CABOZANTINIB (CABOZANTINIB MALATE) 40 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-14"
+    },
+    {
+      "din": "02480840",
+      "ingredient": "CABOZANTINIB (CABOZANTINIB MALATE) 60 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-14"
+    },
+    {
+      "din": "02480948",
+      "ingredient": "LANADELUMAB 300 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-19"
+    },
+    {
+      "din": "02481332",
+      "ingredient": "ELAGOLIX (ELAGOLIX SODIUM) 150 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-05"
+    },
+    {
+      "din": "02481340",
+      "ingredient": "ELAGOLIX (ELAGOLIX SODIUM) 200 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-05"
+    },
+    {
+      "din": "02481359",
+      "ingredient": "PATIROMER (PATIROMER SORBITEX CALCIUM) 8.4 G",
+      "company": "VIFOR FRESENIUS MEDICAL CARE RENAL PHARMA LTD",
+      "dosage_form": "POWDER FOR SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-03"
+    },
+    {
+      "din": "02481367",
+      "ingredient": "PATIROMER (PATIROMER SORBITEX CALCIUM) 16.8 G",
+      "company": "VIFOR FRESENIUS MEDICAL CARE RENAL PHARMA LTD",
+      "dosage_form": "POWDER FOR SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-03"
+    },
+    {
+      "din": "02481545",
+      "ingredient": "DORAVIRINE 100 MG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-12"
+    },
+    {
+      "din": "02481553",
+      "ingredient": "TELOTRISTAT ETHYL (TELOTRISTAT ETIPRATE) 250 MG",
+      "company": "SERB SAS",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-10"
+    },
+    {
+      "din": "02481766",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT, B-DOMAIN DELETED, PEGYLATED) 500 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02481774",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT, B-DOMAIN DELETED, PEGYLATED) 1000 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02481782",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT, B-DOMAIN DELETED, PEGYLATED) 2000 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02481790",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT, B-DOMAIN DELETED, PEGYLATED) 3000 UNIT",
+      "company": "BAYER INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-18"
+    },
+    {
+      "din": "02481820",
+      "ingredient": "PRALATREXATE 20 MG",
+      "company": "SERVIER CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-26"
+    },
+    {
+      "din": "02482592",
+      "ingredient": "DORAVIRINE 100 MG; LAMIVUDINE 300 MG; TENOFOVIR DISOPROXIL FUMARATE 300 MG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-12"
+    },
+    {
+      "din": "02483076",
+      "ingredient": "DINUTUXIMAB 3.5 MG",
+      "company": "UNITED THERAPEUTICS CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-11-28"
+    },
+    {
+      "din": "02483629",
+      "ingredient": "BUROSUMAB 10 MG",
+      "company": "KYOWA KIRIN, INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-12-05"
+    },
+    {
+      "din": "02483637",
+      "ingredient": "BUROSUMAB 20 MG",
+      "company": "KYOWA KIRIN, INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-12-05"
+    },
+    {
+      "din": "02483645",
+      "ingredient": "BUROSUMAB 30 MG",
+      "company": "KYOWA KIRIN, INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-12-05"
+    },
+    {
+      "din": "02483971",
+      "ingredient": "ISAVUCONAZOLE (ISAVUCONAZONIUM SULFATE) 100 MG",
+      "company": "AVIR PHARMA INC.",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-12-19"
+    },
+    {
+      "din": "02483998",
+      "ingredient": "ISAVUCONAZOLE (ISAVUCONAZONIUM SULFATE) 200 MG",
+      "company": "AVIR PHARMA INC.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-12-19"
+    },
+    {
+      "din": "02484013",
+      "ingredient": "CERLIPONASE ALFA 150 MG",
+      "company": "BIOMARIN INTERNATIONAL LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-12-19"
+    },
+    {
+      "din": "02484552",
+      "ingredient": "LUTETIUM (177LU) OXODOTREOTIDE 370 MBq",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-01-09"
+    },
+    {
+      "din": "02484641",
+      "ingredient": "SAFINAMIDE (SAFINAMIDE MESYLATE) 50 MG",
+      "company": "VALEO PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-01-10"
+    },
+    {
+      "din": "02484668",
+      "ingredient": "SAFINAMIDE (SAFINAMIDE MESYLATE) 100 MG",
+      "company": "VALEO PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-01-10"
+    },
+    {
+      "din": "02485648",
+      "ingredient": "AXICABTAGENE CILOLEUCEL 200000000 CELLS",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-02-13"
+    },
+    {
+      "din": "02485966",
+      "ingredient": "LORLATINIB 25 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-02-22"
+    },
+    {
+      "din": "02485974",
+      "ingredient": "LORLATINIB 100 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-02-22"
+    },
+    {
+      "din": "02487098",
+      "ingredient": "ABEMACICLIB 50 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-05"
+    },
+    {
+      "din": "02487101",
+      "ingredient": "ABEMACICLIB 100 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-05"
+    },
+    {
+      "din": "02487128",
+      "ingredient": "ABEMACICLIB 150 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-05"
+    },
+    {
+      "din": "02487136",
+      "ingredient": "ABEMACICLIB 200 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-05"
+    },
+    {
+      "din": "02487144",
+      "ingredient": "CEMIPLIMAB 350 MG",
+      "company": "REGENERON CANADA COMPANY",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-10"
+    },
+    {
+      "din": "02487306",
+      "ingredient": "ERENUMAB 140 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-01"
+    },
+    {
+      "din": "02487462",
+      "ingredient": "FOLLITROPIN DELTA 12 MCG",
+      "company": "FERRING INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-03-22"
+    },
+    {
+      "din": "02487470",
+      "ingredient": "FOLLITROPIN DELTA 36 MCG",
+      "company": "FERRING INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-03-22"
+    },
+    {
+      "din": "02487489",
+      "ingredient": "FOLLITROPIN DELTA 72 MCG",
+      "company": "FERRING INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-03-22"
+    },
+    {
+      "din": "02489252",
+      "ingredient": "PATISIRAN (PATISIRAN SODIUM) 2 MG",
+      "company": "ALNYLAM NETHERLANDS B.V.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-06-07"
+    },
+    {
+      "din": "02489597",
+      "ingredient": "ROMOSOZUMAB 105 MG",
+      "company": "AMGEN CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-06-17"
+    },
+    {
+      "din": "02490005",
+      "ingredient": "OXODOTREOTIDE 40 MCG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "KIT; POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-01-09"
+    },
+    {
+      "din": "02490064",
+      "ingredient": "ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, B-DOMAIN TRUNCATED), PEGYLATED 500 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-04"
+    },
+    {
+      "din": "02490072",
+      "ingredient": "ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, B-DOMAIN TRUNCATED), PEGYLATED 1000 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-04"
+    },
+    {
+      "din": "02490099",
+      "ingredient": "ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, B-DOMAIN TRUNCATED), PEGYLATED 2000 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-04"
+    },
+    {
+      "din": "02490102",
+      "ingredient": "ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, B-DOMAIN TRUNCATED), PEGYLATED 3000 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-04"
+    },
+    {
+      "din": "02490315",
+      "ingredient": "LAROTRECTINIB (LAROTRECTINIB SULFATE) 25 MG",
+      "company": "BAYER INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-10"
+    },
+    {
+      "din": "02490323",
+      "ingredient": "LAROTRECTINIB (LAROTRECTINIB SULFATE) 100 MG",
+      "company": "BAYER INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-10"
+    },
+    {
+      "din": "02490331",
+      "ingredient": "LAROTRECTINIB (LAROTRECTINIB SULFATE) 20 MG",
+      "company": "BAYER INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-10"
+    },
+    {
+      "din": "02490536",
+      "ingredient": "NERATINIB (NERATINIB MALEATE) 40 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-16"
+    },
+    {
+      "din": "02490714",
+      "ingredient": "SODIUM ZIRCONIUM CYCLOSILICATE 5 G",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "POWDER FOR SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-25"
+    },
+    {
+      "din": "02490722",
+      "ingredient": "SODIUM ZIRCONIUM CYCLOSILICATE 10 G",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "POWDER FOR SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-25"
+    },
+    {
+      "din": "02491060",
+      "ingredient": "GALCANEZUMAB 120 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-30"
+    },
+    {
+      "din": "02491087",
+      "ingredient": "GALCANEZUMAB 120 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-30"
+    },
+    {
+      "din": "02492032",
+      "ingredient": "TALAZOPARIB (TALAZOPARIB TOSYLATE) 0.25 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-09-06"
+    },
+    {
+      "din": "02492504",
+      "ingredient": "DUPILUMAB 200 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-30"
+    },
+    {
+      "din": "02493012",
+      "ingredient": "PLECANATIDE 3 MG",
+      "company": "BAUSCH HEALTH, CANADA INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-10-10"
+    },
+    {
+      "din": "02493217",
+      "ingredient": "ERDAFITINIB 3 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-10-25"
+    },
+    {
+      "din": "02493225",
+      "ingredient": "ERDAFITINIB 4 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-10-25"
+    },
+    {
+      "din": "02493233",
+      "ingredient": "ERDAFITINIB 5 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-10-25"
+    },
+    {
+      "din": "02493500",
+      "ingredient": "PRASTERONE 6.5 MG",
+      "company": "COSETTE PHARMACEUTICALS, INC.",
+      "dosage_form": "OVULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-11-01"
+    },
+    {
+      "din": "02494175",
+      "ingredient": "TRIFAROTENE 50 MCG",
+      "company": "GALDERMA CANADA INC.",
+      "dosage_form": "CREAM",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-11-25"
+    },
+    {
+      "din": "02494388",
+      "ingredient": "GEMTUZUMAB OZOGAMICIN 4.5 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-11-28"
+    },
+    {
+      "din": "02495007",
+      "ingredient": "ENTRECTINIB 100 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-10"
+    },
+    {
+      "din": "02495015",
+      "ingredient": "ENTRECTINIB 200 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-10"
+    },
+    {
+      "din": "02495058",
+      "ingredient": "GILTERITINIB (GILTERITINIB FUMARATE) 40 MG",
+      "company": "ASTELLAS PHARMA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-12-23"
+    },
+    {
+      "din": "02495155",
+      "ingredient": "UPADACITINIB 15 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET (EXTENDED-RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-12-23"
+    },
+    {
+      "din": "02495244",
+      "ingredient": "ICOSAPENT ETHYL 1 G",
+      "company": "HLS THERAPEUTICS INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-12-30"
+    },
+    {
+      "din": "02495732",
+      "ingredient": "TAFAMIDIS MEGLUMINE 20 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-01-20"
+    },
+    {
+      "din": "02496135",
+      "ingredient": "BENRALIZUMAB 30 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-02-22"
+    },
+    {
+      "din": "02496348",
+      "ingredient": "DAROLUTAMIDE 300 MG",
+      "company": "BAYER INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-20"
+    },
+    {
+      "din": "02496364",
+      "ingredient": "BALOXAVIR MARBOXIL 20 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-19"
+    },
+    {
+      "din": "02496372",
+      "ingredient": "BALOXAVIR MARBOXIL 40 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-19"
+    },
+    {
+      "din": "02496429",
+      "ingredient": "SIPONIMOD 0.25 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-20"
+    },
+    {
+      "din": "02496437",
+      "ingredient": "SIPONIMOD 2 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-20"
+    },
+    {
+      "din": "02496976",
+      "ingredient": "BROLUCIZUMAB 6 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-03-12"
+    },
+    {
+      "din": "02497069",
+      "ingredient": "ALPELISIB 150 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-03-11"
+    },
+    {
+      "din": "02497077",
+      "ingredient": "ALPELISIB 200 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-03-11"
+    },
+    {
+      "din": "02497085",
+      "ingredient": "ALPELISIB 50 MG; ALPELISIB 200 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "KIT; TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-03-11"
+    },
+    {
+      "din": "02497220",
+      "ingredient": "CABOTEGRAVIR 200 MG; RILPIVIRINE 300 MG",
+      "company": "VIIV HEALTHCARE ULC",
+      "dosage_form": "KIT; SUSPENSION (EXTENDED-RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-03-18"
+    },
+    {
+      "din": "02497247",
+      "ingredient": "CABOTEGRAVIR 200 MG; RILPIVIRINE 300 MG",
+      "company": "VIIV HEALTHCARE ULC",
+      "dosage_form": "SUSPENSION (EXTENDED-RELEASE); KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-03-18"
+    },
+    {
+      "din": "02497859",
+      "ingredient": "FREMANEZUMAB 225 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-04-09"
+    },
+    {
+      "din": "02498049",
+      "ingredient": "TENAPANOR (TENAPANOR HYDROCHLORIDE) 50 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-04-15"
+    },
+    {
+      "din": "02498235",
+      "ingredient": "ISATUXIMAB 100 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-04-29"
+    },
+    {
+      "din": "02498243",
+      "ingredient": "ISATUXIMAB 500 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-04-29"
+    },
+    {
+      "din": "02498472",
+      "ingredient": "GLASDEGIB (GLASDEGIB MALEATE) 25 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-04-28"
+    },
+    {
+      "din": "02498480",
+      "ingredient": "GLASDEGIB (GLASDEGIB MALEATE) 100 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-04-28"
+    },
+    {
+      "din": "02499614",
+      "ingredient": "POLATUZUMAB VEDOTIN 140 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-07-09"
+    },
+    {
+      "din": "02499681",
+      "ingredient": "SATRALIZUMAB 120 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-06-01"
+    },
+    {
+      "din": "02499827",
+      "ingredient": "TUCATINIB 50 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-06-05"
+    },
+    {
+      "din": "02499835",
+      "ingredient": "TUCATINIB 150 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-06-05"
+    },
+    {
+      "din": "02500337",
+      "ingredient": "SONIDEGIB (SONIDEGIB PHOSPHATE) 200 MG",
+      "company": "SUN PHARMACEUTICAL INDUSTRIES LIMITED",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-06-12"
+    },
+    {
+      "din": "02500833",
+      "ingredient": "RIPRETINIB 50 MG",
+      "company": "DECIPHERA PHARMACEUTICALS. LLC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-06-19"
+    },
+    {
+      "din": "02501600",
+      "ingredient": "CEDAZURIDINE 100 MG; DECITABINE 35 MG",
+      "company": "TAIHO PHARMA CANADA, INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-07-07"
+    },
+    {
+      "din": "02502143",
+      "ingredient": "REMDESIVIR 100 MG",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-07-27"
+    },
+    {
+      "din": "02502445",
+      "ingredient": "FEDRATINIB (FEDRATINIB HYDROCHLORIDE) 100 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-07-27"
+    },
+    {
+      "din": "02502984",
+      "ingredient": "AMIFAMPRIDINE (AMIFAMPRIDINE PHOSPHATE) 10 MG",
+      "company": "KYE PHARMACEUTICALS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-07-31"
+    },
+    {
+      "din": "02505134",
+      "ingredient": "GALCANEZUMAB 100 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-07-30"
+    },
+    {
+      "din": "02505614",
+      "ingredient": "LANADELUMAB 300 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-19"
+    },
+    {
+      "din": "02505851",
+      "ingredient": "VORETIGENE NEPARVOVEC 5000000000000 VG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-10-13"
+    },
+    {
+      "din": "02505991",
+      "ingredient": "OZANIMOD (OZANIMOD HYDROCHLORIDE) 0.92 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-10-02"
+    },
+    {
+      "din": "02506009",
+      "ingredient": "OZANIMOD (OZANIMOD HYDROCHLORIDE) 0.23 MG; OZANIMOD (OZANIMOD HYDROCHLORIDE) 0.46 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-10-02"
+    },
+    {
+      "din": "02506343",
+      "ingredient": "GIVOSIRAN (GIVOSIRAN SODIUM) 189 MG",
+      "company": "ALNYLAM NETHERLANDS B.V.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-10-09"
+    },
+    {
+      "din": "02507366",
+      "ingredient": "LEMBOREXANT 5 MG",
+      "company": "EISAI LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-11-04"
+    },
+    {
+      "din": "02507374",
+      "ingredient": "LEMBOREXANT 10 MG",
+      "company": "EISAI LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-11-04"
+    },
+    {
+      "din": "02508052",
+      "ingredient": "FOSTAMATINIB (FOSTAMATINIB DISODIUM) 100 MG",
+      "company": "MEDISON PHARMA CANADA INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-11-19"
+    },
+    {
+      "din": "02508060",
+      "ingredient": "FOSTAMATINIB (FOSTAMATINIB DISODIUM) 150 MG",
+      "company": "MEDISON PHARMA CANADA INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-11-19"
+    },
+    {
+      "din": "02509474",
+      "ingredient": "FREMANEZUMAB 225 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-04-09"
+    },
+    {
+      "din": "02509695",
+      "ingredient": "ONASEMNOGENE ABEPARVOVEC 20000000000000 VG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-12-15"
+    },
+    {
+      "din": "02509733",
+      "ingredient": "MECASERMIN 10 MG",
+      "company": "ESTEVE PHARMACEUTICALS S.A.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-12-17"
+    },
+    {
+      "din": "02510049",
+      "ingredient": "DUPILUMAB 300 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-30"
+    },
+    {
+      "din": "02510839",
+      "ingredient": "EPTINEZUMAB 100 MG",
+      "company": "LUNDBECK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-01-11"
+    },
+    {
+      "din": "02512556",
+      "ingredient": "TRIHEPTANOIN 100 %",
+      "company": "ULTRAGENYX PHARMACEUTICAL INC",
+      "dosage_form": "LIQUID",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-02-15"
+    },
+    {
+      "din": "02512963",
+      "ingredient": "ZANUBRUTINIB 80 MG",
+      "company": "BEONE MEDICINES I GMBH",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-03-01"
+    },
+    {
+      "din": "02513080",
+      "ingredient": "BINIMETINIB 15 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-03-02"
+    },
+    {
+      "din": "02513099",
+      "ingredient": "ENCORAFENIB 75 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-03-02"
+    },
+    {
+      "din": "02513218",
+      "ingredient": "DROSPIRENONE 3 MG; ESTETROL MONOHYDRATE 15 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-03-05"
+    },
+    {
+      "din": "02514400",
+      "ingredient": "TRASTUZUMAB DERUXTECAN 100 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-04-15"
+    },
+    {
+      "din": "02514931",
+      "ingredient": "RISDIPLAM 0.75 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-04-14"
+    },
+    {
+      "din": "02515431",
+      "ingredient": "POLATUZUMAB VEDOTIN 30 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-07-09"
+    },
+    {
+      "din": "02515482",
+      "ingredient": "PONESIMOD 20 MG",
+      "company": "VANDA PHARMACEUTICALS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-04-28"
+    },
+    {
+      "din": "02515814",
+      "ingredient": "SOLRIAMFETOL (SOLRIAMFETOL HYDROCHLORIDE) 75 MG",
+      "company": "AXSOME MALTA LTD.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-05-13"
+    },
+    {
+      "din": "02515822",
+      "ingredient": "SOLRIAMFETOL (SOLRIAMFETOL HYDROCHLORIDE) 150 MG",
+      "company": "AXSOME MALTA LTD.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-05-13"
+    },
+    {
+      "din": "02516098",
+      "ingredient": "TILDRAKIZUMAB 100 MG",
+      "company": "SUN PHARMACEUTICAL INDUSTRIES LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-05-19"
+    },
+    {
+      "din": "02516322",
+      "ingredient": "TEPOTINIB (TEPOTINIB HYDROCHLORIDE) 225 MG",
+      "company": "EMD SERONO, A DIVISION OF EMD INC., CANADA",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-05-27"
+    },
+    {
+      "din": "02516667",
+      "ingredient": "BREXUCABTAGENE AUTOLEUCEL 200000000 CELLS",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-06-08"
+    },
+    {
+      "din": "02516918",
+      "ingredient": "SELPERCATINIB 40 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-06-15"
+    },
+    {
+      "din": "02516926",
+      "ingredient": "SELPERCATINIB 80 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-06-15"
+    },
+    {
+      "din": "02517841",
+      "ingredient": "TAFAMIDIS 61 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-01-20"
+    },
+    {
+      "din": "02518112",
+      "ingredient": "OSPEMIFENE 60 MG",
+      "company": "DUCHESNAY INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-07-16"
+    },
+    {
+      "din": "02518376",
+      "ingredient": "INCLISIRAN (INCLISIRAN SODIUM) 284 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-07-26"
+    },
+    {
+      "din": "02518627",
+      "ingredient": "TAFASITAMAB 200 MG",
+      "company": "INCYTE CORPORATION",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-08-19"
+    },
+    {
+      "din": "02519283",
+      "ingredient": "RISANKIZUMAB 150 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-17"
+    },
+    {
+      "din": "02519291",
+      "ingredient": "RISANKIZUMAB 150 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-17"
+    },
+    {
+      "din": "02519364",
+      "ingredient": "IVACAFTOR 25 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "GRANULES",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-21"
+    },
+    {
+      "din": "02519933",
+      "ingredient": "PEMIGATINIB 4.5 MG",
+      "company": "INCYTE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-09-17"
+    },
+    {
+      "din": "02519941",
+      "ingredient": "PEMIGATINIB 9 MG",
+      "company": "INCYTE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-09-17"
+    },
+    {
+      "din": "02519968",
+      "ingredient": "PEMIGATINIB 13.5 MG",
+      "company": "INCYTE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-09-17"
+    },
+    {
+      "din": "02520095",
+      "ingredient": "SOTORASIB 120 MG",
+      "company": "AMGEN CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-09-10"
+    },
+    {
+      "din": "02520788",
+      "ingredient": "SACITUZUMAB GOVITECAN 180 MG",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-09-24"
+    },
+    {
+      "din": "02520834",
+      "ingredient": "LURBINECTEDIN 4 MG",
+      "company": "JAZZ PHARMACEUTICALS IRELAND LIMITED",
+      "dosage_form": "POWDER",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-09-29"
+    },
+    {
+      "din": "02520869",
+      "ingredient": "FOSTEMSAVIR (FOSTEMSAVIR TROMETHAMINE) 600 MG",
+      "company": "VIIV HEALTHCARE ULC",
+      "dosage_form": "TABLET (EXTENDED-RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-10-01"
+    },
+    {
+      "din": "02520893",
+      "ingredient": "UPADACITINIB 30 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET (EXTENDED-RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-12-23"
+    },
+    {
+      "din": "02521288",
+      "ingredient": "TRALOKINUMAB 150 MG",
+      "company": "LEO PHARMA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-10-13"
+    },
+    {
+      "din": "02521679",
+      "ingredient": "SOMATROGON 20 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-10-26"
+    },
+    {
+      "din": "02521687",
+      "ingredient": "SOMATROGON 50 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-10-26"
+    },
+    {
+      "din": "02521903",
+      "ingredient": "ENFORTUMAB VEDOTIN 20 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-10-29"
+    },
+    {
+      "din": "02521911",
+      "ingredient": "ENFORTUMAB VEDOTIN 30 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-10-29"
+    },
+    {
+      "din": "02522365",
+      "ingredient": "AVALGLUCOSIDASE ALFA 100 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-11-12"
+    },
+    {
+      "din": "02522845",
+      "ingredient": "ANIFROLUMAB 150 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-11-30"
+    },
+    {
+      "din": "02523434",
+      "ingredient": "DOSTARLIMAB 50 MG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-12-23"
+    },
+    {
+      "din": "02524031",
+      "ingredient": "NIRMATRELVIR 150 MG; RITONAVIR 100 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-01-17"
+    },
+    {
+      "din": "02524163",
+      "ingredient": "BALOXAVIR MARBOXIL 80 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2026-02-19"
+    },
+    {
+      "din": "02524252",
+      "ingredient": "DUPILUMAB 200 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-30"
+    },
+    {
+      "din": "02524627",
+      "ingredient": "PALOVAROTENE 1 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-01-21"
+    },
+    {
+      "din": "02524635",
+      "ingredient": "PALOVAROTENE 1.5 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-01-21"
+    },
+    {
+      "din": "02524643",
+      "ingredient": "PALOVAROTENE 2.5 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-01-21"
+    },
+    {
+      "din": "02524651",
+      "ingredient": "PALOVAROTENE 5 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-01-21"
+    },
+    {
+      "din": "02524678",
+      "ingredient": "PALOVAROTENE 10 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-01-21"
+    },
+    {
+      "din": "02525267",
+      "ingredient": "BIMEKIZUMAB 160 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-02-14"
+    },
+    {
+      "din": "02525275",
+      "ingredient": "BIMEKIZUMAB 160 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-02-14"
+    },
+    {
+      "din": "02525755",
+      "ingredient": "LUMASIRAN (LUMASIRAN SODIUM) 94.5 MG",
+      "company": "ALNYLAM NETHERLANDS B.V.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-03-07"
+    },
+    {
+      "din": "02526115",
+      "ingredient": "BELUMOSUDIL (BELUMOSUDIL MESYLATE) 200 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-03-23"
+    },
+    {
+      "din": "02526182",
+      "ingredient": "AMIVANTAMAB 350 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-03-30"
+    },
+    {
+      "din": "02526247",
+      "ingredient": "PEGVALIASE 2.5 MG",
+      "company": "BIOMARIN INTERNATIONAL LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-03-30"
+    },
+    {
+      "din": "02526255",
+      "ingredient": "PEGVALIASE 10 MG",
+      "company": "BIOMARIN INTERNATIONAL LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-03-30"
+    },
+    {
+      "din": "02526263",
+      "ingredient": "PEGVALIASE 20 MG",
+      "company": "BIOMARIN INTERNATIONAL LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-03-30"
+    },
+    {
+      "din": "02526662",
+      "ingredient": "AVACOPAN 10 MG",
+      "company": "VIFOR FRESENIUS MEDICAL CARE RENAL PHARMA LTD",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-04-14"
+    },
+    {
+      "din": "02526794",
+      "ingredient": "CARIPRAZINE (CARIPRAZINE HYDROCHLORIDE) 1.5 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-04-22"
+    },
+    {
+      "din": "02526808",
+      "ingredient": "CARIPRAZINE (CARIPRAZINE HYDROCHLORIDE) 3 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-04-22"
+    },
+    {
+      "din": "02526816",
+      "ingredient": "CARIPRAZINE (CARIPRAZINE HYDROCHLORIDE) 4.5 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-04-22"
+    },
+    {
+      "din": "02526824",
+      "ingredient": "CARIPRAZINE (CARIPRAZINE HYDROCHLORIDE) 6 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-04-22"
+    },
+    {
+      "din": "02527138",
+      "ingredient": "LISOCABTAGENE MARALEUCEL 120000000 CELLS",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-05-06"
+    },
+    {
+      "din": "02527391",
+      "ingredient": "CAPMATINIB (CAPMATINIB HYDROCHLORIDE) 150 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-05-26"
+    },
+    {
+      "din": "02527405",
+      "ingredient": "CAPMATINIB (CAPMATINIB HYDROCHLORIDE) 200 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-05-26"
+    },
+    {
+      "din": "02527588",
+      "ingredient": "TEBENTAFUSP 100 MCG",
+      "company": "IMMUNOCORE IRELAND LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-07"
+    },
+    {
+      "din": "02527618",
+      "ingredient": "FARICIMAB 6 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-05-27"
+    },
+    {
+      "din": "02527677",
+      "ingredient": "SELINEXOR 20 MG",
+      "company": "FORUS THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-05-31"
+    },
+    {
+      "din": "02527693",
+      "ingredient": "BEROTRALSTAT (BEROTRALSTAT HYDROCHLORIDE) 150 MG",
+      "company": "BIOCRYST PHARMACEUTICALS INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-02"
+    },
+    {
+      "din": "02527715",
+      "ingredient": "MOGAMULIZUMAB 4 MG",
+      "company": "KYOWA KIRIN, INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-02"
+    },
+    {
+      "din": "02528320",
+      "ingredient": "ASCIMINIB (ASCIMINIB HYDROCHLORIDE) 20 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-23"
+    },
+    {
+      "din": "02528339",
+      "ingredient": "ASCIMINIB (ASCIMINIB HYDROCHLORIDE) 40 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-23"
+    },
+    {
+      "din": "02528363",
+      "ingredient": "ABROCITINIB 50 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-29"
+    },
+    {
+      "din": "02528371",
+      "ingredient": "ABROCITINIB 100 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-29"
+    },
+    {
+      "din": "02528398",
+      "ingredient": "ABROCITINIB 200 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-06-29"
+    },
+    {
+      "din": "02528908",
+      "ingredient": "BELZUTIFAN 40 MG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-07-11"
+    },
+    {
+      "din": "02529548",
+      "ingredient": "TEZEPELUMAB 110 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-07-28"
+    },
+    {
+      "din": "02529556",
+      "ingredient": "TEZEPELUMAB 110 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-07-28"
+    },
+    {
+      "din": "02529688",
+      "ingredient": "DIFELIKEFALIN (DIFELIKEFALIN ACETATE) 50 MCG",
+      "company": "VIFOR FRESENIUS MEDICAL CARE RENAL PHARMA LTD",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-08-16"
+    },
+    {
+      "din": "02530031",
+      "ingredient": "NIRAPARIB (NIRAPARIB TOSYLATE) 100 MG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-06-27"
+    },
+    {
+      "din": "02530139",
+      "ingredient": "SELUMETINIB (SELUMETINIB SULFATE) 10 MG",
+      "company": "ALEXION PHARMA GMBH",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-08-31"
+    },
+    {
+      "din": "02530147",
+      "ingredient": "SELUMETINIB (SELUMETINIB SULFATE) 25 MG",
+      "company": "ALEXION PHARMA GMBH",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-08-31"
+    },
+    {
+      "din": "02530198",
+      "ingredient": "LUTETIUM (177LU) VIPIVOTIDE TETRAXETAN 1000 MBq",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-08-25"
+    },
+    {
+      "din": "02530740",
+      "ingredient": "MARIBAVIR 200 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-09-15"
+    },
+    {
+      "din": "02531917",
+      "ingredient": "FINERENONE 10 MG",
+      "company": "BAYER INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-10-14"
+    },
+    {
+      "din": "02531925",
+      "ingredient": "FINERENONE 20 MG",
+      "company": "BAYER INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-10-14"
+    },
+    {
+      "din": "02532093",
+      "ingredient": "RISANKIZUMAB 360 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-17"
+    },
+    {
+      "din": "02532107",
+      "ingredient": "RISANKIZUMAB 60 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-17"
+    },
+    {
+      "din": "02532468",
+      "ingredient": "LENACAPAVIR (LENACAPAVIR SODIUM) 300 MG",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-02"
+    },
+    {
+      "din": "02532476",
+      "ingredient": "LENACAPAVIR (LENACAPAVIR SODIUM) 309 MG",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-02"
+    },
+    {
+      "din": "02532530",
+      "ingredient": "UBROGEPANT 50 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-10"
+    },
+    {
+      "din": "02532549",
+      "ingredient": "MAVACAMTEN 2.5 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-08"
+    },
+    {
+      "din": "02532557",
+      "ingredient": "MAVACAMTEN 5 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-08"
+    },
+    {
+      "din": "02532565",
+      "ingredient": "MAVACAMTEN 10 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-08"
+    },
+    {
+      "din": "02532573",
+      "ingredient": "MAVACAMTEN 15 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-08"
+    },
+    {
+      "din": "02532581",
+      "ingredient": "UBROGEPANT 100 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-10"
+    },
+    {
+      "din": "02532611",
+      "ingredient": "EDARAVONE 105 MG",
+      "company": "TANABE PHARMA CORPORATION",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-10-03"
+    },
+    {
+      "din": "02532719",
+      "ingredient": "BREXUCABTAGENE AUTOLEUCEL 100000000 CELLS",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-06-08"
+    },
+    {
+      "din": "02532964",
+      "ingredient": "COAGULATION FACTOR IX (RECOMBINANT), PEGYLATED 3000 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2023-11-29"
+    },
+    {
+      "din": "02533030",
+      "ingredient": "DEUCRAVACITINIB 6 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02533294",
+      "ingredient": "PEGCETACOPLAN 1080 MG",
+      "company": "SWEDISH ORPHAN BIOVITRUM AB (PUBL)",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-12-08"
+    },
+    {
+      "din": "02533448",
+      "ingredient": "RAVULIZUMAB 300 MG",
+      "company": "ALEXION PHARMA GMBH",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-08-28"
+    },
+    {
+      "din": "02533456",
+      "ingredient": "RAVULIZUMAB 1100 MG",
+      "company": "ALEXION PHARMA GMBH",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-08-28"
+    },
+    {
+      "din": "02533979",
+      "ingredient": "ATOGEPANT 10 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-12-22"
+    },
+    {
+      "din": "02533987",
+      "ingredient": "ATOGEPANT 30 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-12-22"
+    },
+    {
+      "din": "02533995",
+      "ingredient": "ATOGEPANT 60 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-12-22"
+    },
+    {
+      "din": "02534622",
+      "ingredient": "CANGRELOR (CANGRELOR TETRASODIUM) 50 MG",
+      "company": "CHIESI FARMACEUTICI S.P.A.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-01-20"
+    },
+    {
+      "din": "02535696",
+      "ingredient": "ACALABRUTINIB (ACALABRUTINIB MALEATE) 100 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-08-23"
+    },
+    {
+      "din": "02536552",
+      "ingredient": "GLOFITAMAB 2.5 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-03-24"
+    },
+    {
+      "din": "02536560",
+      "ingredient": "GLOFITAMAB 10 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-03-24"
+    },
+    {
+      "din": "02537044",
+      "ingredient": "VERICIGUAT 2.5 MG",
+      "company": "BAYER INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-04-28"
+    },
+    {
+      "din": "02537052",
+      "ingredient": "VERICIGUAT 5 MG",
+      "company": "BAYER INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-04-28"
+    },
+    {
+      "din": "02537060",
+      "ingredient": "VERICIGUAT 10 MG",
+      "company": "BAYER INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-04-28"
+    },
+    {
+      "din": "02537443",
+      "ingredient": "DARIDOREXANT (DARIDOREXANT HYDROCHLORIDE) 50 MG",
+      "company": "IDORSIA PHARMACEUTICALS LTD",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-04-28"
+    },
+    {
+      "din": "02537745",
+      "ingredient": "SETMELANOTIDE (SETMELANOTIDE ACETATE) 10 MG",
+      "company": "RHYTHM PHARMACEUTICALS, INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-05-05"
+    },
+    {
+      "din": "02538539",
+      "ingredient": "ANDEXANET ALFA 200 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-16"
+    },
+    {
+      "din": "02538652",
+      "ingredient": "CENOBAMATE 12.5 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538660",
+      "ingredient": "CENOBAMATE 25 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538725",
+      "ingredient": "CENOBAMATE 50 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538733",
+      "ingredient": "CENOBAMATE 100 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538741",
+      "ingredient": "CENOBAMATE 150 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538768",
+      "ingredient": "CENOBAMATE 200 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538776",
+      "ingredient": "CENOBAMATE 25 MG; CENOBAMATE 12.5 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538784",
+      "ingredient": "CENOBAMATE 100 MG; CENOBAMATE 50 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-12"
+    },
+    {
+      "din": "02538881",
+      "ingredient": "CLASCOTERONE 1 %",
+      "company": "SUN PHARMACEUTICAL INDUSTRIES LIMITED",
+      "dosage_form": "CREAM",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-06-15"
+    },
+    {
+      "din": "02539721",
+      "ingredient": "UPADACITINIB 45 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "TABLET (EXTENDED-RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-12-23"
+    },
+    {
+      "din": "02539756",
+      "ingredient": "TECLISTAMAB 30 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-26"
+    },
+    {
+      "din": "02539764",
+      "ingredient": "TECLISTAMAB 153 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-26"
+    },
+    {
+      "din": "02539845",
+      "ingredient": "MIRIKIZUMAB 100 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-20"
+    },
+    {
+      "din": "02539853",
+      "ingredient": "MIRIKIZUMAB 100 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-20"
+    },
+    {
+      "din": "02539861",
+      "ingredient": "MIRIKIZUMAB 20 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-20"
+    },
+    {
+      "din": "02539888",
+      "ingredient": "MARALIXIBAT (MARALIXIBAT CHLORIDE) 9.5 MG",
+      "company": "MIRUM PHARMACEUTICALS, INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-21"
+    },
+    {
+      "din": "02539934",
+      "ingredient": "SOMAPACITAN 5 MG",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-26"
+    },
+    {
+      "din": "02539942",
+      "ingredient": "SOMAPACITAN 10 MG",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-26"
+    },
+    {
+      "din": "02539950",
+      "ingredient": "SOMAPACITAN 15 MG",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-26"
+    },
+    {
+      "din": "02540185",
+      "ingredient": "APALUTAMIDE 240 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-07-03"
+    },
+    {
+      "din": "02540193",
+      "ingredient": "TRALOKINUMAB 300 MG",
+      "company": "LEO PHARMA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-10-13"
+    },
+    {
+      "din": "02540207",
+      "ingredient": "RESPIRATORY SYNCYTIAL VIRUS PREFUSION F PROTEIN (RSVPREF3) 120 MCG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "POWDER FOR SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-08-04"
+    },
+    {
+      "din": "02541009",
+      "ingredient": "TREMELIMUMAB 20 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-08-31"
+    },
+    {
+      "din": "02541041",
+      "ingredient": "TIRZEPATIDE 2.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02541068",
+      "ingredient": "TIRZEPATIDE 5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02541076",
+      "ingredient": "TIRZEPATIDE 7.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02541084",
+      "ingredient": "TIRZEPATIDE 10 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02541092",
+      "ingredient": "TIRZEPATIDE 12.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02541106",
+      "ingredient": "TIRZEPATIDE 15 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02541416",
+      "ingredient": "NIVOLUMAB 240 MG; RELATLIMAB 80 MG",
+      "company": "BRISTOL-MYERS SQUIBB CANADA",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-09-13"
+    },
+    {
+      "din": "02541599",
+      "ingredient": "EFGARTIGIMOD ALFA 20 MG",
+      "company": "ARGENX BV",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-09-19"
+    },
+    {
+      "din": "02541742",
+      "ingredient": "ESTRADIOL 1 MG; NORETHINDRONE ACETATE 0.5 MG; RELUGOLIX 40 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-09-22"
+    },
+    {
+      "din": "02541769",
+      "ingredient": "EVINACUMAB 150 MG",
+      "company": "ULTRAGENYX PHARMACEUTICAL INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-09-22"
+    },
+    {
+      "din": "02542137",
+      "ingredient": "RELUGOLIX 120 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-09-22"
+    },
+    {
+      "din": "02542269",
+      "ingredient": "EPTINEZUMAB 300 MG",
+      "company": "LUNDBECK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-01-11"
+    },
+    {
+      "din": "02542293",
+      "ingredient": "EPCORITAMAB 5 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-13"
+    },
+    {
+      "din": "02542307",
+      "ingredient": "EPCORITAMAB 60 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-13"
+    },
+    {
+      "din": "02542420",
+      "ingredient": "VUTRISIRAN (VUTRISIRAN SODIUM) 25 MG",
+      "company": "ALNYLAM NETHERLANDS B.V.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-18"
+    },
+    {
+      "din": "02542560",
+      "ingredient": "ETRANACOGENE DEZAPARVOVEC 10000000000000 GENOME COPIES",
+      "company": "CSL BEHRING CANADA INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-23"
+    },
+    {
+      "din": "02542641",
+      "ingredient": "ODEVIXIBAT 200 MCG",
+      "company": "MEDISON PHARMA CANADA INC.",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-30"
+    },
+    {
+      "din": "02542676",
+      "ingredient": "ODEVIXIBAT 400 MCG",
+      "company": "MEDISON PHARMA CANADA INC.",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-30"
+    },
+    {
+      "din": "02542684",
+      "ingredient": "ODEVIXIBAT 600 MCG",
+      "company": "MEDISON PHARMA CANADA INC.",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-30"
+    },
+    {
+      "din": "02542692",
+      "ingredient": "ODEVIXIBAT 1200 MCG",
+      "company": "MEDISON PHARMA CANADA INC.",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-10-30"
+    },
+    {
+      "din": "02542706",
+      "ingredient": "AVATROMBOPAG (AVATROMBOPAG MALEATE) 20 MG",
+      "company": "SWEDISH ORPHAN BIOVITRUM AB (PUBL)",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-11-03"
+    },
+    {
+      "din": "02542943",
+      "ingredient": "CALASPARGASE PEGOL 3750 UNIT",
+      "company": "SERVIER CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-11-08"
+    },
+    {
+      "din": "02543451",
+      "ingredient": "IVACAFTOR 13.4 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "GRANULES",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-21"
+    },
+    {
+      "din": "02543532",
+      "ingredient": "RITLECITINIB (RITLECITINIB TOSYLATE) 50 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-11-29"
+    },
+    {
+      "din": "02543559",
+      "ingredient": "ELRANATAMAB 44 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-12-06"
+    },
+    {
+      "din": "02543567",
+      "ingredient": "ELRANATAMAB 76 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-12-06"
+    },
+    {
+      "din": "02543605",
+      "ingredient": "RIMEGEPANT (RIMEGEPANT SULFATE) 75 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET (ORALLY DISINTEGRATING)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-12-01"
+    },
+    {
+      "din": "02543931",
+      "ingredient": "INEBILIZUMAB 10 MG",
+      "company": "AMGEN CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-12-15"
+    },
+    {
+      "din": "02544555",
+      "ingredient": "METRELEPTIN 3 MG",
+      "company": "CHIESI FARMACEUTICI S.P.A.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-01-17"
+    },
+    {
+      "din": "02544563",
+      "ingredient": "METRELEPTIN 5.8 MG",
+      "company": "CHIESI FARMACEUTICI S.P.A.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-01-17"
+    },
+    {
+      "din": "02544571",
+      "ingredient": "METRELEPTIN 11.3 MG",
+      "company": "CHIESI FARMACEUTICI S.P.A.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-01-17"
+    },
+    {
+      "din": "02544733",
+      "ingredient": "CAPIVASERTIB 160 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-01-26"
+    },
+    {
+      "din": "02544741",
+      "ingredient": "CAPIVASERTIB 200 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-01-26"
+    },
+    {
+      "din": "02544768",
+      "ingredient": "BARICITINIB 4 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-08-17"
+    },
+    {
+      "din": "02544903",
+      "ingredient": "ETRASIMOD (ETRASIMOD L-ARGININE) 2 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-01-31"
+    },
+    {
+      "din": "02545721",
+      "ingredient": "OLIPUDASE ALFA 20 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-02-28"
+    },
+    {
+      "din": "02546205",
+      "ingredient": "INSULIN ICODEC 700 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-03-12"
+    },
+    {
+      "din": "02546213",
+      "ingredient": "INSULIN ICODEC 1050 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-03-12"
+    },
+    {
+      "din": "02546221",
+      "ingredient": "INSULIN ICODEC 2100 UNIT",
+      "company": "NOVO NORDISK CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-03-12"
+    },
+    {
+      "din": "02547392",
+      "ingredient": "TALQUETAMAB 2 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-04-30"
+    },
+    {
+      "din": "02547406",
+      "ingredient": "TALQUETAMAB 40 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-04-30"
+    },
+    {
+      "din": "02548909",
+      "ingredient": "EPLONTERSEN (EPLONTERSEN SODIUM) 45 MG",
+      "company": "ASTRAZENECA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-06-19"
+    },
+    {
+      "din": "02548984",
+      "ingredient": "CHIKUNGUNYA VIRUS LIVE-ATTENUATED 3 Log10 TCID50",
+      "company": "VALNEVA AUSTRIA GMBH",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-06-20"
+    },
+    {
+      "din": "02549123",
+      "ingredient": "LEBRIKIZUMAB 250 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-06-24"
+    },
+    {
+      "din": "02549131",
+      "ingredient": "LEBRIKIZUMAB 250 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-06-24"
+    },
+    {
+      "din": "02549220",
+      "ingredient": "ZILUCOPLAN (ZILUCOPLAN SODIUM) 16.6 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-07-11"
+    },
+    {
+      "din": "02549239",
+      "ingredient": "ZILUCOPLAN (ZILUCOPLAN SODIUM) 23 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-07-11"
+    },
+    {
+      "din": "02549247",
+      "ingredient": "ZILUCOPLAN (ZILUCOPLAN SODIUM) 32.4 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-07-11"
+    },
+    {
+      "din": "02549980",
+      "ingredient": "IVOSIDENIB 250 MG",
+      "company": "SERVIER CANADA INC",
+      "dosage_form": "TABLET (IMMEDIATE RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-07-19"
+    },
+    {
+      "din": "02550040",
+      "ingredient": "DANICOPAN 150 MG",
+      "company": "ALEXION PHARMA GMBH",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-07-19"
+    },
+    {
+      "din": "02550059",
+      "ingredient": "DANICOPAN 200 MG",
+      "company": "ALEXION PHARMA GMBH",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-07-19"
+    },
+    {
+      "din": "02551225",
+      "ingredient": "VORASIDENIB 10 MG",
+      "company": "SERVIER CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-08-27"
+    },
+    {
+      "din": "02551233",
+      "ingredient": "VORASIDENIB 40 MG",
+      "company": "SERVIER CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-08-27"
+    },
+    {
+      "din": "02551306",
+      "ingredient": "SOTATERCEPT 45 MG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-08-28"
+    },
+    {
+      "din": "02551314",
+      "ingredient": "SOTATERCEPT 60 MG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "KIT; POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-08-28"
+    },
+    {
+      "din": "02551403",
+      "ingredient": "PERFLUOROHEXYLOCTANE 100 %",
+      "company": "BAUSCH & LOMB INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-04"
+    },
+    {
+      "din": "02551454",
+      "ingredient": "FRUQUINTINIB 1 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-10"
+    },
+    {
+      "din": "02551462",
+      "ingredient": "FRUQUINTINIB 5 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-10"
+    },
+    {
+      "din": "02551551",
+      "ingredient": "TARLATAMAB 1 MG",
+      "company": "AMGEN CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-11"
+    },
+    {
+      "din": "02551578",
+      "ingredient": "TARLATAMAB 10 MG",
+      "company": "AMGEN CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-11"
+    },
+    {
+      "din": "02551764",
+      "ingredient": "AVAPRITINIB 25 MG",
+      "company": "BLUEPRINT MEDICINES CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-18"
+    },
+    {
+      "din": "02551772",
+      "ingredient": "AVAPRITINIB 50 MG",
+      "company": "BLUEPRINT MEDICINES CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-18"
+    },
+    {
+      "din": "02551780",
+      "ingredient": "AVAPRITINIB 100 MG",
+      "company": "BLUEPRINT MEDICINES CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-18"
+    },
+    {
+      "din": "02551799",
+      "ingredient": "AVAPRITINIB 200 MG",
+      "company": "BLUEPRINT MEDICINES CORPORATION",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-09-18"
+    },
+    {
+      "din": "02551950",
+      "ingredient": "TIRZEPATIDE 2.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02551969",
+      "ingredient": "TIRZEPATIDE 5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02551977",
+      "ingredient": "TIRZEPATIDE 7.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02551985",
+      "ingredient": "TIRZEPATIDE 10 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02551993",
+      "ingredient": "TIRZEPATIDE 12.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02552000",
+      "ingredient": "TIRZEPATIDE 15 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02552507",
+      "ingredient": "RISANKIZUMAB 180 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-04-17"
+    },
+    {
+      "din": "02552523",
+      "ingredient": "TROFINETIDE 200 MG",
+      "company": "ACADIA PHARMACEUTICALS INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-10-11"
+    },
+    {
+      "din": "02552655",
+      "ingredient": "SOTORASIB 240 MG",
+      "company": "AMGEN CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-09-10"
+    },
+    {
+      "din": "02552965",
+      "ingredient": "MOMELOTINIB (MOMELOTINIB DIHYDROCHLORIDE) 100 MG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-11-08"
+    },
+    {
+      "din": "02552973",
+      "ingredient": "MOMELOTINIB (MOMELOTINIB DIHYDROCHLORIDE) 150 MG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-11-08"
+    },
+    {
+      "din": "02552981",
+      "ingredient": "MOMELOTINIB (MOMELOTINIB DIHYDROCHLORIDE) 200 MG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-11-08"
+    },
+    {
+      "din": "02553279",
+      "ingredient": "ISAVUCONAZOLE (ISAVUCONAZONIUM SULFATE) 40 MG",
+      "company": "AVIR PHARMA INC.",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-12-19"
+    },
+    {
+      "din": "02553600",
+      "ingredient": "FEZOLINETANT 45 MG",
+      "company": "ASTELLAS PHARMA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-12-02"
+    },
+    {
+      "din": "02553619",
+      "ingredient": "BIMEKIZUMAB 320 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-02-14"
+    },
+    {
+      "din": "02553627",
+      "ingredient": "BIMEKIZUMAB 320 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-02-14"
+    },
+    {
+      "din": "02553996",
+      "ingredient": "ZOLBETUXIMAB 100 MG",
+      "company": "ASTELLAS PHARMA CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-12-13"
+    },
+    {
+      "din": "02554003",
+      "ingredient": "FARICIMAB 6 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-05-27"
+    },
+    {
+      "din": "02554070",
+      "ingredient": "ETHINYL ESTRADIOL 17.4 MG; SEGESTERONE ACETATE 103 MG",
+      "company": "DUCHESNAY INC",
+      "dosage_form": "RING (SLOW-RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-12-18"
+    },
+    {
+      "din": "02554151",
+      "ingredient": "MEROPENEM (MEROPENEM TRIHYDRATE) 1 G; VABORBACTAM 1 G",
+      "company": "XEDITON PHARMACEUTICALS INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2030-12-20"
+    },
+    {
+      "din": "02554267",
+      "ingredient": "ZANUBRUTINIB 160 MG",
+      "company": "BEONE MEDICINES I GMBH",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-03-01"
+    },
+    {
+      "din": "02554313",
+      "ingredient": "IPTACOPAN (IPTACOPAN HYDROCHLORIDE) 200 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-01-06"
+    },
+    {
+      "din": "02554429",
+      "ingredient": "DELAFLOXACIN (DELAFLOXACIN MEGLUMINE) 450 MG",
+      "company": "XEDITON PHARMACEUTICALS INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-01-17"
+    },
+    {
+      "din": "02554437",
+      "ingredient": "DELAFLOXACIN (DELAFLOXACIN MEGLUMINE) 300 MG",
+      "company": "XEDITON PHARMACEUTICALS INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-01-17"
+    },
+    {
+      "din": "02555050",
+      "ingredient": "TALAZOPARIB (TALAZOPARIB TOSYLATE) 0.1 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2025-09-06"
+    },
+    {
+      "din": "02555239",
+      "ingredient": "RETIFANLIMAB 25 MG",
+      "company": "INCYTE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-02-06"
+    },
+    {
+      "din": "02555476",
+      "ingredient": "INAVOLISIB 3 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-02-14"
+    },
+    {
+      "din": "02555484",
+      "ingredient": "INAVOLISIB 9 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-02-14"
+    },
+    {
+      "din": "02555735",
+      "ingredient": "TOFERSEN 100 MG",
+      "company": "BIOGEN CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-02-28"
+    },
+    {
+      "din": "02555948",
+      "ingredient": "FECAL MICROBIOTA 50000000000 CFU",
+      "company": "FERRING INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-03-05"
+    },
+    {
+      "din": "02555964",
+      "ingredient": "LAZERTINIB (LAZERTINIB MESYLATE) 80 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-03-06"
+    },
+    {
+      "din": "02555972",
+      "ingredient": "LAZERTINIB (LAZERTINIB MESYLATE) 240 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-03-06"
+    },
+    {
+      "din": "02556081",
+      "ingredient": "ROZANOLIXIZUMAB 280 MG",
+      "company": "UCB CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-03-28"
+    },
+    {
+      "din": "02556219",
+      "ingredient": "OMAVELOXOLONE 50 MG",
+      "company": "BIOGEN CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-03-13"
+    },
+    {
+      "din": "02556898",
+      "ingredient": "CIPAGLUCOSIDASE ALFA 105 MG",
+      "company": "AMICUS THERAPEUTICS CANADA INC.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-04-14"
+    },
+    {
+      "din": "02557010",
+      "ingredient": "ELAFIBRANOR 80 MG",
+      "company": "IPSEN BIOPHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-04-25"
+    },
+    {
+      "din": "02557061",
+      "ingredient": "TEPROTUMUMAB 500 MG",
+      "company": "AMGEN CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-04-17"
+    },
+    {
+      "din": "02557347",
+      "ingredient": "TEPLIZUMAB 2 MG",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-05-05"
+    },
+    {
+      "din": "02557509",
+      "ingredient": "TIRZEPATIDE 2.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02557517",
+      "ingredient": "TIRZEPATIDE 5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02557525",
+      "ingredient": "TIRZEPATIDE 7.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02557533",
+      "ingredient": "TIRZEPATIDE 10 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02557541",
+      "ingredient": "TIRZEPATIDE 12.5 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02557568",
+      "ingredient": "TIRZEPATIDE 15 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2028-11-24"
+    },
+    {
+      "din": "02558262",
+      "ingredient": "CROVALIMAB 170 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-06-04"
+    },
+    {
+      "din": "02558351",
+      "ingredient": "QUIZARTINIB (QUIZARTINIB HYDROCHLORIDE) 17.7 MG",
+      "company": "DAIICHI SANKYO PHARMA CANADA LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-06-09"
+    },
+    {
+      "din": "02558378",
+      "ingredient": "QUIZARTINIB (QUIZARTINIB HYDROCHLORIDE) 26.5 MG",
+      "company": "DAIICHI SANKYO PHARMA CANADA LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-06-09"
+    },
+    {
+      "din": "02558904",
+      "ingredient": "TILDRAKIZUMAB 100 MG",
+      "company": "SUN PHARMACEUTICAL INDUSTRIES LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-05-19"
+    },
+    {
+      "din": "02558912",
+      "ingredient": "OSILODROSTAT (OSILODROSTAT PHOSPHATE) 1 MG",
+      "company": "RECORDATI RARE DISEASES CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-03"
+    },
+    {
+      "din": "02558920",
+      "ingredient": "OSILODROSTAT (OSILODROSTAT PHOSPHATE) 5 MG",
+      "company": "RECORDATI RARE DISEASES CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-03"
+    },
+    {
+      "din": "02558939",
+      "ingredient": "OSILODROSTAT (OSILODROSTAT PHOSPHATE) 10 MG",
+      "company": "RECORDATI RARE DISEASES CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-03"
+    },
+    {
+      "din": "02559218",
+      "ingredient": "MIRIKIZUMAB 200 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-20"
+    },
+    {
+      "din": "02559226",
+      "ingredient": "MIRIKIZUMAB 200 ML",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-20"
+    },
+    {
+      "din": "02559234",
+      "ingredient": "MIRIKIZUMAB 100 MG; MIRIKIZUMAB 200 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-20"
+    },
+    {
+      "din": "02559242",
+      "ingredient": "MIRIKIZUMAB 100 MG; MIRIKIZUMAB 200 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-20"
+    },
+    {
+      "din": "02559617",
+      "ingredient": "BELANTAMAB MAFODOTIN 70 MG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-18"
+    },
+    {
+      "din": "02559625",
+      "ingredient": "BELANTAMAB MAFODOTIN 100 MG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-07-18"
+    },
+    {
+      "din": "02559676",
+      "ingredient": "DEUTIVACAFTOR 50 MG; TEZACAFTOR 20 MG; VANZACAFTOR (VANZACAFTOR CALCIUM) 4 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-06-27"
+    },
+    {
+      "din": "02559684",
+      "ingredient": "DEUTIVACAFTOR 125 MG; TEZACAFTOR 50 MG; VANZACAFTOR (VANZACAFTOR CALCIUM) 10 MG",
+      "company": "VERTEX PHARMACEUTICALS (CANADA) INCORPORATED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-06-27"
+    },
+    {
+      "din": "02559773",
+      "ingredient": "GARADACIMAB 200 MG",
+      "company": "CSL BEHRING CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-08-06"
+    },
+    {
+      "din": "02560178",
+      "ingredient": "BULEVIRTIDE (BULEVIRTIDE ACETATE) 2 MG",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-08-08"
+    },
+    {
+      "din": "02560704",
+      "ingredient": "DELGOCITINIB 20 MG",
+      "company": "LEO PHARMA INC",
+      "dosage_form": "CREAM",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-08-25"
+    },
+    {
+      "din": "02560747",
+      "ingredient": "RISDIPLAM 5 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2027-04-14"
+    },
+    {
+      "din": "02560771",
+      "ingredient": "MIRVETUXIMAB SORAVTANSINE 100 MG",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-08-29"
+    },
+    {
+      "din": "02561492",
+      "ingredient": "SELADELPAR (SELADELPAR LYSINE) 10 MG",
+      "company": "GILEAD SCIENCES CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-10-16"
+    },
+    {
+      "din": "02561506",
+      "ingredient": "VAMOROLONE 40 MG",
+      "company": "KYE PHARMACEUTICALS INC.",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-09-29"
+    },
+    {
+      "din": "02561824",
+      "ingredient": "SEPIAPTERIN 250 MG",
+      "company": "PTC THERAPEUTICS INTERNATIONAL LIMITED",
+      "dosage_form": "POWDER",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-10-07"
+    },
+    {
+      "din": "02561832",
+      "ingredient": "SEPIAPTERIN 1000 MG",
+      "company": "PTC THERAPEUTICS INTERNATIONAL LIMITED",
+      "dosage_form": "POWDER",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-10-07"
+    },
+    {
+      "din": "02562006",
+      "ingredient": "PIRTOBRUTINIB 50 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-10-17"
+    },
+    {
+      "din": "02562014",
+      "ingredient": "PIRTOBRUTINIB 100 MG",
+      "company": "ELI LILLY CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-10-17"
+    },
+    {
+      "din": "02562219",
+      "ingredient": "TORIPALIMAB 40 MG",
+      "company": "APOTEX INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-10-17"
+    },
+    {
+      "din": "02562383",
+      "ingredient": "LECANEMAB 100 MG",
+      "company": "EISAI LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-10-24"
+    },
+    {
+      "din": "02562634",
+      "ingredient": "EFGARTIGIMOD ALFA 200 MG",
+      "company": "ARGENX BV",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-09-19"
+    },
+    {
+      "din": "02562782",
+      "ingredient": "BEMPEDOIC ACID 180 MG",
+      "company": "HLS THERAPEUTICS INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-11-14"
+    },
+    {
+      "din": "02563444",
+      "ingredient": "SEVABERTINIB 10 MG",
+      "company": "BAYER INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2032-01-29"
+    },
+    {
+      "din": "02563509",
+      "ingredient": "NIPOCALIMAB 300 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-12-05"
+    },
+    {
+      "din": "02563517",
+      "ingredient": "NIPOCALIMAB 1200 MG",
+      "company": "JANSSEN INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-12-05"
+    },
+    {
+      "din": "02563525",
+      "ingredient": "ZURANOLONE 20 MG",
+      "company": "BIOGEN CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-12-05"
+    },
+    {
+      "din": "02563533",
+      "ingredient": "ZURANOLONE 25 MG",
+      "company": "BIOGEN CANADA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-12-05"
+    },
+    {
+      "din": "02563673",
+      "ingredient": "NEMOLIZUMAB 30 MG",
+      "company": "GALDERMA CANADA INC.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-12-18"
+    },
+    {
+      "din": "02563886",
+      "ingredient": "OLEZARSEN (OLEZARSEN SODIUM) 80 MG",
+      "company": "THERATECHNOLOGIES INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-12-16"
+    },
+    {
+      "din": "02564009",
+      "ingredient": "TISLELIZUMAB 100 MG",
+      "company": "BEONE MEDICINES I GMBH",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2031-12-18"
+    },
+    {
+      "din": "02564483",
+      "ingredient": "LANADELUMAB 300 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2024-09-19"
+    },
+    {
+      "din": "02565161",
+      "ingredient": "PALOPEGTERIPARATIDE 294 MCG",
+      "company": "PENDOPHARM DIVISION OF PHARMASCIENCE INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2032-01-28"
+    },
+    {
+      "din": "02565188",
+      "ingredient": "PALOPEGTERIPARATIDE 420 MCG",
+      "company": "PENDOPHARM DIVISION OF PHARMASCIENCE INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2032-01-28"
+    },
+    {
+      "din": "02565226",
+      "ingredient": "MOSUNETUZUMAB 1 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2032-02-06"
+    },
+    {
+      "din": "02565234",
+      "ingredient": "MARALIXIBAT (MARALIXIBAT CHLORIDE) 10 MG",
+      "company": "MIRUM PHARMACEUTICALS, INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-21"
+    },
+    {
+      "din": "02565242",
+      "ingredient": "MARALIXIBAT (MARALIXIBAT CHLORIDE) 15 MG",
+      "company": "MIRUM PHARMACEUTICALS, INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-21"
+    },
+    {
+      "din": "02565250",
+      "ingredient": "MARALIXIBAT (MARALIXIBAT CHLORIDE) 20 MG",
+      "company": "MIRUM PHARMACEUTICALS, INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-21"
+    },
+    {
+      "din": "02565269",
+      "ingredient": "MARALIXIBAT (MARALIXIBAT CHLORIDE) 30 MG",
+      "company": "MIRUM PHARMACEUTICALS, INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-21"
+    },
+    {
+      "din": "02565277",
+      "ingredient": "MARALIXIBAT (MARALIXIBAT CHLORIDE) 19 MG",
+      "company": "MIRUM PHARMACEUTICALS, INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2029-07-21"
+    },
+    {
+      "din": "02565323",
+      "ingredient": "CILASTATIN (CILASTATIN SODIUM) 500 MG; IMIPENEM 500 MG; RELEBACTAM 250 MG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": "2032-01-30"
+    }
+  ],
+  "near_miss": [
+    {
+      "din": "02230578",
+      "ingredient": "HEPATITIS A VIRUS, INACTIVATED 720 UNIT; HEPATITIS B SURFACE ANTIGEN (RECOMBINANT) 20 MCG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02231493",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "BGP PHARMA ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02237548",
+      "ingredient": "HEPATITIS A VIRUS, INACTIVATED 360 UNIT; HEPATITIS B SURFACE ANTIGEN (RECOMBINANT) 10 MCG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02240692",
+      "ingredient": "TRASTUZUMAB 440 MG",
+      "company": "HOFFMANN-LA ROCHE LIMITED",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02243676",
+      "ingredient": "HEPATITIS B SURFACE ANTIGEN (RECOMBINANT) 10 MCG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02245977",
+      "ingredient": "HEPATITIS B SURFACE ANTIGEN (RECOMBINANT) 40 MCG",
+      "company": "MERCK CANADA INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02253852",
+      "ingredient": "DIPHTHERIA TOXOID 25 LF; FILAMENTOUS HAEMAGGLUTININ 25 MCG; HAEMOPHILUS INFLUENZAE TYPE B-PRP 10 MCG; HEPATITIS B SURFACE ANTIGEN (RECOMBINANT) 10 MCG; PERTACTIN 8 MCG; PERTUSSIS TOXOID 25 MCG; POLIOVIRUS TYPE 1 MAHONEY (INACTIVATED) 40 UNIT; POLIOVIRUS TYPE 2 MEF1 (INACTIVATED) 8 UNIT; POLIOVIRUS TYPE 3 SAUKETT (INACTIVATED) 32 UNIT; TETANUS TOXOID 10 LF; TETANUS TOXOID ADSORBED 40 MCG",
+      "company": "GLAXOSMITHKLINE INC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02254786",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02261219",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (HUMAN) 250 UNIT; VON WILLEBRAND FACTOR (HUMAN) 600 UNIT",
+      "company": "CSL BEHRING CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02261227",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (HUMAN) 500 UNIT; VON WILLEBRAND FACTOR (HUMAN) 1200 UNIT",
+      "company": "CSL BEHRING CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02261235",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (HUMAN) 1000 UNIT; VON WILLEBRAND FACTOR (HUMAN) 2400 UNIT",
+      "company": "CSL BEHRING CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02286750",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (HUMAN) 500 UNIT; HUMAN PLASMA PROTEINS 7.5 MG; VON WILLEBRAND FACTOR (HUMAN) 500 UNIT",
+      "company": "OCTAPHARMA PHARMAZEUTIKA PRODUKTIONSGES M B H",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02286769",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (HUMAN) 1000 UNIT; HUMAN PLASMA PROTEINS 15 MG; VON WILLEBRAND FACTOR (HUMAN) 1000 UNIT",
+      "company": "OCTAPHARMA PHARMAZEUTIKA PRODUKTIONSGES M B H",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02296527",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "APOTEX INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02341085",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "LABORATOIRE RIVA INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02367335",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "SANDOZ CANADA INCORPORATED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02373041",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "MYLAN PHARMACEUTICALS ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02379910",
+      "ingredient": "FAMPRIDINE 10 MG",
+      "company": "MERZ THERAPEUTICS GMBH",
+      "dosage_form": "TABLET (EXTENDED-RELEASE)",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02426935",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "GENERIC MEDICAL PARTNERS INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02430290",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT BDD), FC FUSION PROTEIN 250 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02430304",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT BDD), FC FUSION PROTEIN 500 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02430312",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT BDD), FC FUSION PROTEIN 750 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02430320",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT BDD), FC FUSION PROTEIN 1000 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02430339",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT BDD), FC FUSION PROTEIN 1500 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02430347",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT BDD), FC FUSION PROTEIN 2000 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02430355",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT BDD), FC FUSION PROTEIN 3000 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02447401",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT) PORCINE SEQUENCE 500 UNIT",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02447967",
+      "ingredient": "*ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, BDD), FC-VWF-XTEN FUSION PROTEIN 3000 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02448122",
+      "ingredient": "*ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, BDD), FC-VWF-XTEN FUSION PROTEIN 500 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02448130",
+      "ingredient": "*ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, BDD), FC-VWF-XTEN FUSION PROTEIN 1000 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02448149",
+      "ingredient": "*ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, BDD), FC-VWF-XTEN FUSION PROTEIN 2000 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02448157",
+      "ingredient": "*ANTIHEMOPHILIC FACTOR VIII (RECOMBINANT, BDD), FC-VWF-XTEN FUSION PROTEIN 4000 UNIT",
+      "company": "SANOFI-AVENTIS CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02453355",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "JAMP PHARMA CORPORATION",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02456230",
+      "ingredient": "LATANOPROST 50 MCG",
+      "company": "LABORATOIRES THEA",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02459078",
+      "ingredient": "ANTIHEMOPHILIC FACTOR (RECOMBINANT), PEGYLATED 2000 UNIT",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "POWDER FOR SOLUTION; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02474425",
+      "ingredient": "TRASTUZUMAB 150 MG",
+      "company": "BIOSIMILAR COLLABORATIONS IRELAND LIMITED",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02479206",
+      "ingredient": "BRIGATINIB 30 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02479214",
+      "ingredient": "BRIGATINIB 90 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02479222",
+      "ingredient": "BRIGATINIB 180 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "02479230",
+      "ingredient": "BRIGATINIB 180 MG; BRIGATINIB 90 MG",
+      "company": "TAKEDA CANADA INC",
+      "dosage_form": "TABLET; KIT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    }
+  ],
+  "blank": [
+    {
+      "din": "00000809",
+      "ingredient": "HYPROMELLOSE 0.5 %",
+      "company": "ALCON CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00000817",
+      "ingredient": "HYPROMELLOSE 1 %",
+      "company": "ALCON CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00000868",
+      "ingredient": "PILOCARPINE HYDROCHLORIDE 2 %",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00000981",
+      "ingredient": "TROPICAMIDE 0.5 %",
+      "company": "ALCON CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001007",
+      "ingredient": "TROPICAMIDE 1 %",
+      "company": "ALCON CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001147",
+      "ingredient": "NAPHAZOLINE HYDROCHLORIDE 0.1 %",
+      "company": "ABBVIE CORPORATION",
+      "dosage_form": "DROPS",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001694",
+      "ingredient": "LIDOCAINE HYDROCHLORIDE 20 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "GEL",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001732",
+      "ingredient": "LIDOCAINE HYDROCHLORIDE 10 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001791",
+      "ingredient": "EPINEPHRINE (EPINEPHRINE BITARTRATE) 0.01 MG; LIDOCAINE HYDROCHLORIDE 10 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001805",
+      "ingredient": "EPINEPHRINE (EPINEPHRINE BITARTRATE) 5 MCG; LIDOCAINE HYDROCHLORIDE 10 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001937",
+      "ingredient": "LIDOCAINE HYDROCHLORIDE 100 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00001961",
+      "ingredient": "LIDOCAINE 5 %",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "OINTMENT",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00003875",
+      "ingredient": "BISACODYL 10 MG",
+      "company": "SANOFI CONSUMER HEALTH INC",
+      "dosage_form": "SUPPOSITORY",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00004596",
+      "ingredient": "AZATHIOPRINE 50 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00004618",
+      "ingredient": "BUSULFAN 2 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00004626",
+      "ingredient": "CHLORAMBUCIL 2 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00004715",
+      "ingredient": "MELPHALAN 2 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00004723",
+      "ingredient": "MERCAPTOPURINE 50 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00009881",
+      "ingredient": "PAPAVERINE HYDROCHLORIDE 65 MG",
+      "company": "SANDOZ CANADA INCORPORATED",
+      "dosage_form": "LIQUID",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00010405",
+      "ingredient": "CARBAMAZEPINE 200 MG",
+      "company": "NOVARTIS PHARMACEUTICALS CANADA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00012750",
+      "ingredient": "PROCARBAZINE (PROCARBAZINE HYDROCHLORIDE) 50 MG",
+      "company": "LEADIANT BIOSCIENCES, INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00012882",
+      "ingredient": "FLUOROURACIL 50 MG",
+      "company": "SANDOZ CANADA INCORPORATED",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00013285",
+      "ingredient": "DIAZEPAM 5 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00013609",
+      "ingredient": "DIMENHYDRINATE 100 MG",
+      "company": "CHURCH & DWIGHT CANADA CORP",
+      "dosage_form": "SUPPOSITORY",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00013617",
+      "ingredient": "SIMETHICONE 40 MG",
+      "company": "CHURCH & DWIGHT CANADA CORP",
+      "dosage_form": "DROPS",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00013803",
+      "ingredient": "DIMENHYDRINATE 50 MG",
+      "company": "CHURCH & DWIGHT CANADA CORP",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00015229",
+      "ingredient": "NORTRIPTYLINE (NORTRIPTYLINE HYDROCHLORIDE) 10 MG",
+      "company": "AA PHARMA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00015237",
+      "ingredient": "NORTRIPTYLINE (NORTRIPTYLINE HYDROCHLORIDE) 25 MG",
+      "company": "AA PHARMA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00015741",
+      "ingredient": "METHIMAZOLE 5 MG",
+      "company": "KNIGHT THERAPEUTICS INC.",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00016055",
+      "ingredient": "PENICILLAMINE 250 MG",
+      "company": "BAUSCH HEALTH, CANADA INC.",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00020877",
+      "ingredient": "AMPICILLIN (AMPICILLIN TRIHYDRATE) 250 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00020885",
+      "ingredient": "AMPICILLIN (AMPICILLIN TRIHYDRATE) 500 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00021008",
+      "ingredient": "QUININE SULFATE 200 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00021016",
+      "ingredient": "QUININE SULFATE 300 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00021288",
+      "ingredient": "CHLORPHENIRAMINE MALEATE 4 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00021474",
+      "ingredient": "HYDROCHLOROTHIAZIDE 25 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00021482",
+      "ingredient": "HYDROCHLOROTHIAZIDE 50 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00021695",
+      "ingredient": "PREDNISONE 5 MG",
+      "company": "TEVA CANADA LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00022381",
+      "ingredient": "TETRACOSACTIDE 0.25 MG",
+      "company": "AMPHASTAR PHARMACEUTICALS, INC.",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00022772",
+      "ingredient": "PHENYTOIN SODIUM 30 MG",
+      "company": "BGP PHARMA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00022780",
+      "ingredient": "PHENYTOIN SODIUM 100 MG",
+      "company": "BGP PHARMA ULC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00022799",
+      "ingredient": "ETHOSUXIMIDE 250 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00023485",
+      "ingredient": "ETHOSUXIMIDE 250 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "SYRUP",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00023698",
+      "ingredient": "PHENYTOIN 50 MG",
+      "company": "BGP PHARMA ULC",
+      "dosage_form": "TABLET (CHEWABLE)",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00023760",
+      "ingredient": "NORETHINDRONE ACETATE 5 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00023949",
+      "ingredient": "THYROID 30 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00023957",
+      "ingredient": "THYROID 60 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00023965",
+      "ingredient": "THYROID 125 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00024325",
+      "ingredient": "DOXEPIN (DOXEPIN HYDROCHLORIDE) 10 MG",
+      "company": "AA PHARMA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00024333",
+      "ingredient": "DOXEPIN (DOXEPIN HYDROCHLORIDE) 25 MG",
+      "company": "AA PHARMA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00024341",
+      "ingredient": "DOXEPIN (DOXEPIN HYDROCHLORIDE) 50 MG",
+      "company": "AA PHARMA INC",
+      "dosage_form": "CAPSULE",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00024694",
+      "ingredient": "HYDROXYZINE HYDROCHLORIDE 10 MG",
+      "company": "SEARCHLIGHT PHARMA INC",
+      "dosage_form": "SYRUP",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00026123",
+      "ingredient": "DOCUSATE SODIUM 50 MG; SENNOSIDES 8.6 MG",
+      "company": "INOVA PHARMACEUTICALS (AUSTRALIA) PTY LIMITED",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00027243",
+      "ingredient": "DIHYDROERGOTAMINE MESYLATE 1 MG",
+      "company": "STERIMAX INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00028096",
+      "ingredient": "BETAMETHASONE (BETAMETHASONE SODIUM PHOSPHATE) 3 MG; BETAMETHASONE ACETATE 3 MG",
+      "company": "ORGANON CANADA INC.",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00028606",
+      "ingredient": "SPIRONOLACTONE 25 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00029149",
+      "ingredient": "AMPHOTERICIN B 50 MG",
+      "company": "CHEPLAPHARM ARZNEIMITTEL GMBH",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030600",
+      "ingredient": "HYDROCORTISONE (HYDROCORTISONE SODIUM SUCCINATE) 100 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030619",
+      "ingredient": "HYDROCORTISONE (HYDROCORTISONE SODIUM SUCCINATE) 250 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030627",
+      "ingredient": "HYDROCORTISONE (HYDROCORTISONE SODIUM SUCCINATE) 500 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030635",
+      "ingredient": "HYDROCORTISONE (HYDROCORTISONE SODIUM SUCCINATE) 1 G",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030678",
+      "ingredient": "METHYLPREDNISOLONE (METHYLPREDNISOLONE SODIUM SUCCINATE) 500 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030759",
+      "ingredient": "METHYLPREDNISOLONE ACETATE 40 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030767",
+      "ingredient": "METHYLPREDNISOLONE ACETATE 80 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SUSPENSION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030910",
+      "ingredient": "HYDROCORTISONE 10 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030929",
+      "ingredient": "HYDROCORTISONE 20 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00030988",
+      "ingredient": "METHYLPREDNISOLONE 4 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00035017",
+      "ingredient": "ATROPINE SULFATE 1 %",
+      "company": "ALCON CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00035076",
+      "ingredient": "PROPARACAINE HYDROCHLORIDE 0.5 %",
+      "company": "ALCON CANADA INC",
+      "dosage_form": "DROPS",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00036129",
+      "ingredient": "METHYLPREDNISOLONE 16 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00036137",
+      "ingredient": "METHYLPREDNISOLONE (METHYLPREDNISOLONE SODIUM SUCCINATE) 1 G",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "POWDER FOR SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00036323",
+      "ingredient": "ATROPINE SULFATE .025 MG; DIPHENOXYLATE HYDROCHLORIDE 2.5 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00036641",
+      "ingredient": "LIDOCAINE HYDROCHLORIDE 20 MG",
+      "company": "ASPEN PHARMACARE CANADA INC.",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00037613",
+      "ingredient": "NITROGLYCERIN 0.3 MG",
+      "company": "BGP PHARMA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00037621",
+      "ingredient": "NITROGLYCERIN 0.6 MG",
+      "company": "BGP PHARMA ULC",
+      "dosage_form": "TABLET",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00037796",
+      "ingredient": "SODIUM CHLORIDE 9 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00037818",
+      "ingredient": "SODIUM CHLORIDE 9 MG",
+      "company": "PFIZER CANADA ULC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00037826",
+      "ingredient": "SODIUM CHLORIDE 9 MG",
+      "company": "ICU MEDICAL CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00037834",
+      "ingredient": "SODIUM CHLORIDE 9 MG",
+      "company": "ICU MEDICAL CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    },
+    {
+      "din": "00037842",
+      "ingredient": "SODIUM CHLORIDE 9 MG",
+      "company": "ICU MEDICAL CANADA INC",
+      "dosage_form": "SOLUTION",
+      "status": "MARKETED",
+      "expected_no_file_date": null
+    }
+  ]
+}

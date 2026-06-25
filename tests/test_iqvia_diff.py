@@ -88,6 +88,57 @@ def test_exits_sorted_by_dollars_desc(diff):
     assert list(diff.exits["Product"]) == ["ZANTAC", "PEPCID"]
 
 
+def test_signal_rows_group_a_products_strengths_together():
+    # A multi-strength exit must keep all of its strengths ADJACENT (and never drop
+    # the small one) — a plain Dollars-desc sort scatters them, making the small
+    # strength read as "missing".  Build a pair where one product (BIGDRUG) exits at
+    # two very different strengths ($90M @ 80MG, $0.1M @ 160MG) alongside a mid-size
+    # exit (MIDDRUG $5M): the product groups rank largest-first, but BIGDRUG's two
+    # strengths stay side by side rather than landing ~1 row apart around MIDDRUG.
+    from tests.scripts.build_iqvia_diff_fixture import _ID, _OLD_METRICS, _NEW_METRICS
+    import csv as _csv, io as _io
+
+    # _ID order: Channel, Combined Molecule, Strength, Pack, Product, Form 3,
+    # Manufacturer, Corporation, Product Form, Province. Metric cols carry TWO
+    # periods (6 values): earlier period 0, latest period = the test value.
+    def _row(brand, mfr, strength, dollars):
+        return ["Drugstore", brand, strength, "30 TAB", brand, "TAB ORAL",
+                mfr, mfr, "TAB", "ONTARIO",
+                "0", "0", "0", str(dollars), str(dollars // 10), str(dollars // 10)]
+
+    old_rows = [
+        _row("BIGDRUG", "ACME", "80MG", 90_000_000),
+        _row("BIGDRUG", "ACME", "160MG", 100_000),
+        _row("MIDDRUG", "BETA", "50MG", 5_000_000),
+    ]
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(_ID + _OLD_METRICS)
+    w.writerows(old_rows)
+    old_bytes = buf.getvalue().encode("utf-8")
+    # New file: everything in old exits — one inert, unrelated row so the latest-MAT
+    # period still resolves to a later quarter than old (6 metric values).
+    new_df = pd.DataFrame(
+        [["Drugstore", "ZZOTHER", "1MG", "30 TAB", "ZZOTHER", "TAB ORAL",
+          "GAMMA", "GAMMA", "TAB", "ONTARIO", 0, 0, 0, 1, 1, 1]],
+        columns=_ID + _NEW_METRICS,
+    )
+    nbuf = _io.BytesIO()
+    with pd.ExcelWriter(nbuf, engine="openpyxl") as xw:
+        new_df.to_excel(xw, sheet_name="data", index=False)
+    d = compare_iqvia(old_bytes, nbuf.getvalue())
+
+    products = list(d.exits["Product"])
+    # Both BIGDRUG strengths present (small one not dropped) ...
+    assert products.count("BIGDRUG") == 2
+    # ... and adjacent (group held together), with the larger product group first.
+    first = products.index("BIGDRUG")
+    assert products[first:first + 2] == ["BIGDRUG", "BIGDRUG"]
+    assert products[0] == "BIGDRUG"  # $90.1M group ranks ahead of MIDDRUG's $5M
+    big = d.exits[d.exits["Product"] == "BIGDRUG"]
+    assert list(big["Strength"]) == ["80MG", "160MG"]  # within group: Dollars desc
+
+
 # ── MATERIAL MOVE (+ identity normalisation) ──────────────────────────────────
 
 def test_material_move_values(diff):
@@ -110,7 +161,97 @@ def test_material_move_survives_formatting_jitter(diff):
     assert "LIPITOR" not in set(diff.exits["Product"])
 
 
+# ── Manufacturer identity normalisation (merge vs split) ──────────────────────
+
+def test_norm_company_identity_merges_legal_and_geographic_jitter():
+    # Legal-suffix and geographic ("Canada", "Health", "Consumer Healthcare",
+    # "Division") jitter for the SAME firm must fold to one identity key.
+    from app.enrichment.iqvia_diff import _norm_company_identity as n
+    for a, b in [
+        ("PFIZER CANADA ULC", "PFIZER"),
+        ("Bayer Inc", "Bayer Incorporated"),
+        ("Sandoz Canada Inc", "Sandoz"),
+        ("GSK Consumer Healthcare", "GSK"),
+        ("Merck Canada Inc", "Merck"),
+        ("Teva Canada Limited", "Teva Canada Ltd"),
+        ("Novartis Pharmaceuticals Canada Inc", "Novartis Pharmaceuticals Inc"),
+    ]:
+        assert n(a) == n(b) != "", f"{a!r} should equal {b!r}: {n(a)!r} vs {n(b)!r}"
+
+
+def test_norm_company_identity_keeps_firm_distinguishing_words():
+    # A descriptive word that distinguishes two REAL firms (Pharma vs Therapeutics,
+    # Pharma vs Labs) must be KEPT — the diff has no fuzzy floor, so stripping it
+    # would silently merge two companies and erase a real exit + entrant.
+    from app.enrichment.iqvia_diff import _norm_company_identity as n
+    for a, b in [
+        ("Acme Pharma Inc", "Acme Therapeutics Inc"),
+        ("Acme Pharmaceuticals", "Acme Therapeutics"),
+        ("Sun Pharma", "Sun Labs"),
+        ("Beigene Switz GmbH", "Beone Med I GmbH"),
+    ]:
+        assert n(a) != n(b), f"{a!r} must differ from {b!r}: both -> {n(a)!r}"
+
+
+def test_distinct_firms_are_exit_plus_entrant_not_silent_merge():
+    # End-to-end: same molecule/brand/strength sold by two DIFFERENT manufacturers
+    # that differ only by a firm-distinguishing word must surface as a visible
+    # exit + entrant pair — never collapse into one (possibly dropped) move.
+    from tests.scripts.build_iqvia_diff_fixture import _ID, _OLD_METRICS, _NEW_METRICS
+    import csv as _csv, io as _io
+
+    def _row(mfr, dollars, metrics_cols):
+        base = ["Drugstore", "MOLZ", "50MG", "30 TAB", "BRANDZ", "TAB ORAL",
+                mfr, mfr, "TAB", "ONTARIO"]
+        if metrics_cols is _OLD_METRICS:
+            return base + ["0", "0", "0", str(dollars), str(dollars // 2), str(dollars // 2)]
+        return base + [0, 0, 0, dollars, dollars // 2, dollars // 2]
+
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(_ID + _OLD_METRICS)
+    w.writerow(_row("Acme Pharma Inc", 100_000_000, _OLD_METRICS))
+    old_bytes = buf.getvalue().encode("utf-8")
+    new_df = pd.DataFrame([_row("Acme Therapeutics Inc", 103_000_000, _NEW_METRICS)],
+                          columns=_ID + _NEW_METRICS)
+    nbuf = _io.BytesIO()
+    with pd.ExcelWriter(nbuf, engine="openpyxl") as xw:
+        new_df.to_excel(xw, sheet_name="data", index=False)
+    d = compare_iqvia(old_bytes, nbuf.getvalue())
+
+    assert list(d.exits["Manufacturer"]) == ["Acme Pharma Inc"]
+    assert list(d.entrants["Manufacturer"]) == ["Acme Therapeutics Inc"]
+    assert d.moves.empty
+
+
 # ── Workbook shape ─────────────────────────────────────────────────────────────
+
+
+def test_workbook_metric_headers_carry_mat_period(diff):
+    # The diff reports a single latest-MAT period per file; the metric headers must
+    # name it so a figure is never mistaken for an all-time total. Entrants carry
+    # the new-file period, exits the old-file period, moves carry both; Δ/Δ% stay
+    # bare (they span both periods).
+    import io
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(build_diff_workbook(diff)), read_only=True)
+
+    def _headers(sheet):
+        return [str(c.value) for c in next(wb[sheet].iter_rows(min_row=1, max_row=1))]
+
+    old_lbl = f"{diff.old_period[0]}/{diff.old_period[1]:02d}"   # 2024/06
+    new_lbl = f"{diff.new_period[0]}/{diff.new_period[1]:02d}"   # 2024/12
+
+    ent, ex, mv = _headers("New Entrants"), _headers("Exits"), _headers("Material Moves")
+    for metric in ("Dollars", "Units", "Ext Units"):
+        assert f"{metric} (MAT {new_lbl})" in ent
+        assert f"{metric} (MAT {old_lbl})" in ex
+        assert f"{metric} Old (MAT {old_lbl})" in mv
+        assert f"{metric} New (MAT {new_lbl})" in mv
+        assert f"{metric} Δ" in mv and f"{metric} Δ%" in mv   # deltas stay bare
+    # Identity columns are never relabelled.
+    assert ent[:4] == ["Combined Molecule", "Product", "Manufacturer", "Strength"]
 
 def test_workbook_has_four_sheets(diff):
     import io

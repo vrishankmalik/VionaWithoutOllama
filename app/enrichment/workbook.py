@@ -469,13 +469,23 @@ def build_sheet1(
     dp_table: Optional[list[dict]] = None,
     ingredient_name: Optional[str] = None,
     as_of: Optional["datetime.date"] = None,
+    include_dpd_only: bool = False,
 ) -> pd.DataFrame:
     """Build Sheet 1: one row per DIN, DPD + NOC + patents + labeling + data protection.
 
-    A DIN appears only when it is present in BOTH NOC and DPD. NOC-only DINs (in
-    NOC but absent from DPD) are excluded — they carry no DPD product data and are
-    not useful in the export (e.g. DINs 02272113, 02272121). DPD-only DINs (in DPD
-    but absent from NOC) are likewise excluded; they appear in build_exclusion_list().
+    Default (``include_dpd_only=False``): a DIN appears only when it is present in
+    BOTH NOC and DPD. NOC-only DINs (in NOC but absent from DPD) are excluded — they
+    carry no DPD product data and are not useful in the export (e.g. DINs 02272113,
+    02272121). DPD-only DINs (in DPD but absent from NOC) are likewise excluded; they
+    appear in build_exclusion_list(). This is the frozen behavior used by the
+    single/multi-ingredient export (options 1 & 2) and is byte-for-byte unchanged.
+
+    ``include_dpd_only=True`` (full-universe path only): the DIN universe becomes the
+    UNION of DPD and NOC, so DPD-only (grandfathered / pre-NOC) products are KEPT.
+    Their NOC columns carry the "No NOC record" sentinel and patent / data-protection
+    columns are blank — exactly the cite-or-blank row-level behavior the existing row
+    assembly already produces for a DIN with no matching NOC record. Nothing about the
+    default path changes; this is a new branch behind a defaulted flag.
     """
     all_records = [r for s in response.sources for r in s.records]
 
@@ -505,7 +515,7 @@ def build_sheet1(
             len(noc_only), response.metadata.query, noc_only,
         )
 
-    all_dins = sorted(noc_dins & dpd_dins)
+    all_dins = sorted(noc_dins | dpd_dins) if include_dpd_only else sorted(noc_dins & dpd_dins)
     if not all_dins:
         logger.warning(
             "No DINs present in both NOC and DPD for %r — Sheet 1 will be empty.",

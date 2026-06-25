@@ -290,7 +290,7 @@ async def run_export_job(
                 "stage": "Patents", "done": 0, "total": 0,
                 "pct": _overall_pct("Patents", 1, 1),
                 "elapsed_s": elapsed(), "eta_s": 0,
-                "log": "No valid DINs — patents skipped",
+                "log": "No valid DINs found; patents skipped",
             })
 
         # ── Stage 3: Labeling (per-unique-DIN, all products combined) ─────────
@@ -445,11 +445,18 @@ async def run_export_job(
         # scraping. Produces a two-tab Summary + Detail filtered workbook.
         filtered_bytes: Optional[bytes] = None
         if job.filter_criteria:
-            from app.enrichment.screen import build_filtered_workbook, parse_criteria
+            from app.enrichment.screen import (
+                build_filtered_workbook, parse_criteria,
+                parse_dosage_forms, parse_no_file_date,
+            )
             try:
                 criteria = parse_criteria(job.filter_criteria)
+                dosage_bases = parse_dosage_forms(job.filter_criteria)
+                date_filter = parse_no_file_date(job.filter_criteria)
                 filtered_bytes, summary_out, _detail_out, screen_warnings = (
-                    build_filtered_workbook(sheet1_df, sheet2_df, criteria)
+                    build_filtered_workbook(
+                        sheet1_df, sheet2_df, criteria, dosage_bases, date_filter
+                    )
                 )
                 for label in screen_warnings:
                     await emit(job, {
@@ -484,7 +491,7 @@ async def run_export_job(
         await emit(job, {
             "stage": "Workbook", "done": 1, "total": 1,
             "pct": 1.0, "elapsed_s": total_elapsed, "eta_s": 0,
-            "log": f"Workbook ready — {len(xlsx_bytes):,} bytes",
+            "log": f"Workbook ready: {len(xlsx_bytes):,} bytes",
         })
 
         job.status = "complete"

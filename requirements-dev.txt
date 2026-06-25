@@ -1,0 +1,9 @@
+# Test/dev-only dependencies (not needed to run the app).
+# Install:  pip install -r requirements-dev.txt
+#           python -m playwright install chromium   # one-time browser download
+pytest
+pytest-asyncio
+anyio
+respx
+playwright
+psutil      # tests/deploy/test_deploy_memory_local.py — measures peak RSS of a full build

@@ -34,7 +34,8 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from datetime import date
+from typing import Any, Iterable, Optional
 
 import pandas as pd
 
@@ -69,6 +70,171 @@ _METRIC_TO_COLUMN = {
 _IQVIA_METRICS = frozenset({"value", "quantity", "quantity_ext"})
 
 _VALID_OPERATORS = frozenset({"above", "below", "exactly"})
+
+# Two ADDITIVE filter criteria that ride in the same request list as the six
+# numeric ones but are parsed/applied separately (categorical + date, not numeric
+# above/below/exactly). parse_criteria() skips these so the six are untouched.
+_DOSAGE_FORM_METRIC = "dosage_form"
+_NO_FILE_DATE_METRIC = "no_file_date"
+_NEW_METRICS = frozenset({_DOSAGE_FORM_METRIC, _NO_FILE_DATE_METRIC})
+
+# no-file-date operators (distinct from the numeric above/below/exactly set).
+_NO_FILE_OPERATORS = frozenset({"less", "greater", "greater_or_equal", "equal"})
+
+
+# ── Dosage-form base mapping (shared, canonical) ──────────────────────────────
+
+def base_dosage_form(raw: Any) -> str:
+    """Collapse a raw DPD dosage-form string to its base form.
+
+    The base is the text before the first ``(`` or ``,`` (release-type and route
+    qualifiers stripped), trimmed and upper-cased.  e.g. ``TABLET
+    (EXTENDED-RELEASE)`` and ``TABLET`` both → ``TABLET``.  This is the SINGLE
+    canonical collapse used both to build the dropdown's base→raw map at
+    universe-build time and to match rows at filter time, so the two never drift.
+    """
+    if raw is None:
+        return ""
+    return re.split(r"\s*[(,]", str(raw), maxsplit=1)[0].strip().upper()
+
+
+def iter_atomic_forms(dosage_form: Any) -> list[str]:
+    """Split a Sheet-1 dosage_form cell (sometimes ``"FORM A; FORM B"``) into the
+    individual raw form strings."""
+    return [p.strip() for p in str(dosage_form or "").split(";") if p.strip()]
+
+
+def build_dosage_form_map(dosage_form_values: Iterable[Any]) -> dict[str, list[str]]:
+    """Build the base-form → sorted raw-variants map from DPD dosage_form cells.
+
+    Accepts the per-product ``dosage_form`` strings straight off the catalogue
+    (multi-form cells are split on ``;``).  The dropdown shows ``sorted(map)`` (the
+    base forms); selecting one matches every raw variant under it.
+    """
+    acc: dict[str, set[str]] = {}
+    for cell in dosage_form_values:
+        for raw in iter_atomic_forms(cell):
+            base = base_dosage_form(raw)
+            if base:
+                acc.setdefault(base, set()).add(raw)
+    return {base: sorted(variants) for base, variants in sorted(acc.items())}
+
+
+def _row_matches_dosage(dosage_form: Any, selected_bases: frozenset[str]) -> bool:
+    """True if ANY of the row's split forms collapses to a selected base form."""
+    for raw in iter_atomic_forms(dosage_form):
+        if base_dosage_form(raw) in selected_bases:
+            return True
+    return False
+
+
+# ── Six-year no-file date parsing (stored value + user threshold) ─────────────
+
+# The stored dp_6yr_no_file_date is raw verbatim register text — usually
+# YYYY-MM-DD, but also "N/A", footnote-annotated dates, or blank. We extract a
+# leading ISO date anywhere in the string; anything without one is treated blank.
+_STORED_ISO_DATE_RE = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
+_USER_MDY_RE = re.compile(r"^\s*(\d{2})/(\d{2})/(\d{4})\s*$")
+
+
+@dataclass(frozen=True)
+class NoFileDateFilter:
+    """A six-year no-file-date test: ``operator threshold`` (threshold is future)."""
+    operator: str
+    threshold: date
+
+    def __post_init__(self) -> None:
+        if self.operator not in _NO_FILE_OPERATORS:
+            raise ValueError(
+                f"Unknown no-file-date operator {self.operator!r}; "
+                f"expected one of {sorted(_NO_FILE_OPERATORS)}"
+            )
+
+
+def parse_stored_no_file_date(value: Any) -> Optional[date]:
+    """Parse a stored dp_6yr_no_file_date cell into a date, or None when blank.
+
+    None/empty/"N/A"/footnote-junk → None (treated as blank).  A real YYYY-MM-DD
+    (optionally followed by footnote text) → that date.
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    m = _STORED_ISO_DATE_RE.search(s)
+    if not m:
+        return None
+    try:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def _parse_user_mdy(s: str, today: Optional[date] = None) -> date:
+    """Parse a user-entered MM/DD/YYYY threshold; reject malformed and past dates."""
+    m = _USER_MDY_RE.match(s or "")
+    if not m:
+        raise ValueError(
+            f"Six-year no-file date must be MM/DD/YYYY (Month/Day/Year): {s!r}"
+        )
+    mm, dd, yyyy = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    try:
+        d = date(yyyy, mm, dd)
+    except ValueError:
+        raise ValueError(f"Invalid calendar date (MM/DD/YYYY): {s!r}")
+    if d <= (today or date.today()):
+        raise ValueError(
+            f"Six-year no-file date must be in the future (MM/DD/YYYY): {s!r}"
+        )
+    return d
+
+
+def parse_dosage_forms(raw: Optional[list[dict]]) -> list[str]:
+    """Extract the selected base dosage forms from the raw criteria list.
+
+    The dosage-form entry's ``value`` may be a list (multi-select) or a single
+    string.  Returns the de-duplicated, upper-cased base forms; empty when none
+    selected (→ dosage form does not constrain results).
+    """
+    bases: set[str] = set()
+    for entry in raw or []:
+        if str(entry.get("metric") or "").strip() != _DOSAGE_FORM_METRIC:
+            continue
+        value = entry.get("value")
+        items = value if isinstance(value, (list, tuple)) else [value]
+        for item in items:
+            if item is None:
+                continue
+            b = str(item).strip().upper()
+            if b:
+                bases.add(b)
+    return sorted(bases)
+
+
+def parse_no_file_date(
+    raw: Optional[list[dict]], today: Optional[date] = None
+) -> Optional[NoFileDateFilter]:
+    """Extract the six-year no-file-date filter from the raw criteria list.
+
+    Returns None when no (or a value-less) no-file-date entry is present — so the
+    filter is additive.  Raises ValueError on a bad operator, malformed date, or
+    past/non-future date (validated server-side; the UI validates too).
+    """
+    for entry in raw or []:
+        if str(entry.get("metric") or "").strip() != _NO_FILE_DATE_METRIC:
+            continue
+        value = entry.get("value")
+        if value is None or str(value).strip() == "":
+            return None
+        operator = str(entry.get("operator") or "").strip().lower()
+        if operator not in _NO_FILE_OPERATORS:
+            raise ValueError(
+                f"Unknown no-file-date operator {operator!r}; "
+                f"expected one of {sorted(_NO_FILE_OPERATORS)}"
+            )
+        return NoFileDateFilter(operator, _parse_user_mdy(str(value), today=today))
+    return None
 
 # Summary tab column order + display headers.
 _SUMMARY_COLS = (
@@ -128,6 +294,10 @@ def parse_criteria(raw: Optional[list[dict]]) -> list[Criterion]:
         metric = str(entry.get("metric") or "").strip()
         operator = str(entry.get("operator") or "").strip().lower()
         value = entry.get("value")
+        # The two ADDITIVE filters (dosage form, no-file date) ride in the same
+        # list but are parsed by parse_dosage_forms() / parse_no_file_date().
+        if metric in _NEW_METRICS:
+            continue
         if not metric or not operator:
             continue
         if value is None or str(value).strip() == "":
@@ -284,6 +454,7 @@ def compute_products(
                     "value": 0.0,
                     "quantity": 0.0,
                     "quantity_ext": 0.0,
+                    "dp_dates": set(),
                 }
                 products[pkey] = p
 
@@ -296,6 +467,11 @@ def compute_products(
                 p["all_companies"].add(company)
                 if status == "marketed":
                     p["marketed_companies"].add(company)
+            # Six-year no-file date is a per-DIN register value (cite-or-blank);
+            # collect the parseable ones for the additive date filter.
+            dp_date = parse_stored_no_file_date(row.get("dp_6yr_no_file_date"))
+            if dp_date is not None:
+                p["dp_dates"].add(dp_date)
             # Metric cells are populated on the FIRST Sheet-1 row of each DIN only
             # (the matcher stamps once per DIN), so summing every row never
             # double-counts; unmatched DINs contribute 0 via _num().
@@ -324,13 +500,17 @@ def compute_products(
             "quantity_ext_sizeable": _as_int(p["quantity_ext"]),
             "_dins": list(p["dins"]),
             "_ing_key": ing_key,
+            # Product-level representative no-file date = the LATEST parseable
+            # register date among the product's DINs (typically the innovator's,
+            # since generics don't match the Register). None → "blank" product.
+            "_no_file_date": (max(p["dp_dates"]) if p["dp_dates"] else None),
         })
 
     # Deterministic order: ingredient label, then dosage form.
     rows.sort(key=lambda r: (r["ingredient"], r["dosage_form"]))
     products_df = pd.DataFrame(
         rows,
-        columns=list(_SUMMARY_COLS) + ["_dins", "_ing_key"],
+        columns=list(_SUMMARY_COLS) + ["_dins", "_ing_key", "_no_file_date"],
     )
     return products_df, sorted(set(warnings))
 
@@ -381,6 +561,87 @@ def requires_iqvia(criteria: list[Criterion]) -> bool:
     return any(c.metric in _IQVIA_METRICS for c in criteria)
 
 
+def apply_dosage_form_filter(
+    products_df: pd.DataFrame,
+    dosage_bases: Optional[list[str]],
+) -> pd.DataFrame:
+    """Keep products whose dosage form maps to one of the selected base forms.
+
+    Additive: an empty/None selection returns the frame unchanged.  A product
+    matches if ANY of its (``;``-split) raw forms collapses to a selected base —
+    so picking ``TABLET`` matches ``TABLET (EXTENDED-RELEASE)`` etc.
+    """
+    if not dosage_bases or products_df.empty:
+        return products_df
+    selected = frozenset(b.strip().upper() for b in dosage_bases if b and b.strip())
+    if not selected:
+        return products_df
+    mask = products_df["dosage_form"].apply(lambda v: _row_matches_dosage(v, selected))
+    return products_df[mask].reset_index(drop=True)
+
+
+def _no_file_date_passes(value: Any, date_filter: NoFileDateFilter) -> bool:
+    """Apply the operator + blank rules to one product's representative date.
+
+    Blank (None) rows: included only for ``less``; excluded for
+    ``greater`` / ``greater_or_equal`` / ``equal``.
+    """
+    d = value
+    if d is not None and not isinstance(d, date):
+        try:
+            if pd.isna(d):
+                d = None
+        except (TypeError, ValueError):
+            d = None
+        if d is not None and hasattr(d, "date"):
+            d = d.date()  # pandas Timestamp → date
+    if not isinstance(d, date):
+        d = None
+    if d is None:
+        return date_filter.operator == "less"
+    if date_filter.operator == "less":
+        return d < date_filter.threshold
+    if date_filter.operator == "greater":
+        return d > date_filter.threshold
+    if date_filter.operator == "greater_or_equal":
+        return d >= date_filter.threshold
+    return d == date_filter.threshold  # equal
+
+
+def apply_no_file_date_filter(
+    products_df: pd.DataFrame,
+    date_filter: Optional[NoFileDateFilter],
+) -> pd.DataFrame:
+    """Filter products by their six-year no-file date (additive when None)."""
+    if date_filter is None or products_df.empty:
+        return products_df
+    col = (
+        products_df["_no_file_date"]
+        if "_no_file_date" in products_df.columns
+        else pd.Series([None] * len(products_df), index=products_df.index)
+    )
+    mask = col.apply(lambda v: _no_file_date_passes(v, date_filter))
+    return products_df[mask].reset_index(drop=True)
+
+
+def filter_products(
+    products_df: pd.DataFrame,
+    criteria: list[Criterion],
+    dosage_bases: Optional[list[str]] = None,
+    date_filter: Optional[NoFileDateFilter] = None,
+) -> pd.DataFrame:
+    """The single canonical screen: the six numeric criteria AND the two additive
+    filters (dosage form, no-file date), combined with logical AND.
+
+    With no dosage selection and no date filter this is exactly ``apply_criteria``,
+    so existing flows are byte-identical.
+    """
+    qualifying = apply_criteria(products_df, criteria)
+    qualifying = apply_dosage_form_filter(qualifying, dosage_bases)
+    qualifying = apply_no_file_date_filter(qualifying, date_filter)
+    return qualifying
+
+
 # ── Workbook assembly ─────────────────────────────────────────────────────────
 
 def build_summary_sheet(qualifying: pd.DataFrame) -> pd.DataFrame:
@@ -418,11 +679,15 @@ def build_filtered_workbook(
     sheet1_df: pd.DataFrame,
     sheet2_df: pd.DataFrame,
     criteria: list[Criterion],
+    dosage_bases: Optional[list[str]] = None,
+    date_filter: Optional[NoFileDateFilter] = None,
 ) -> tuple[bytes, pd.DataFrame, pd.DataFrame, list[str]]:
     """Screen the built workbook data and return a two-tab filtered XLSX.
 
     Returns ``(xlsx_bytes, summary_df, detail_df, warnings)`` where summary_df and
     detail_df carry display-name headers (the same frames written to the file).
+    ``dosage_bases`` / ``date_filter`` are the two additive criteria; omitting both
+    reproduces the original six-criteria-only behavior exactly.
     """
     from app.enrichment.workbook import _style_sheet
 
@@ -435,7 +700,7 @@ def build_filtered_workbook(
             )
 
     products_df, warnings = compute_products(sheet1_df, sheet2_df)
-    qualifying = apply_criteria(products_df, criteria)
+    qualifying = filter_products(products_df, criteria, dosage_bases, date_filter)
 
     summary_out = build_summary_sheet(qualifying)
     detail_out = build_detail_sheet(sheet1_df, qualifying)

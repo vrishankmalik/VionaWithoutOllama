@@ -28,13 +28,17 @@ emits three signals:
                     with Units, is not an independent trigger)
 
 Below-threshold moves are dropped.  Entrants and exits are never thresholded —
-appearing or disappearing from the market is always material — and are sorted by
-size so the largest land first.  Nothing is ever invented: a missing metric for a
-period is read as 0, and Δ% is left blank when the old base is 0.
+appearing or disappearing from the market is always material — and are ordered so a
+product's strengths stay together (product groups ranked largest-first by total
+Dollars, strengths held adjacent — see _sort_signal), so a small strength can never
+read as "missing" beside its large sibling.  Nothing is ever invented: a missing
+metric for a period is read as 0, and Δ% is left blank when the old base is 0.
 """
 from __future__ import annotations
 
 import io
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -47,7 +51,6 @@ from app.enrichment.iqvia import (
     detect_metric_columns,
     latest_mat_metrics,
     _norm_brand,
-    _norm_company,
     _norm_strength,
 )
 
@@ -57,6 +60,53 @@ _ID_COLS = ["Combined Molecule", "Product", "Manufacturer", "Strength"]
 _METRICS = ["dollars", "units", "ext_units"]
 _METRIC_LABEL = {"dollars": "Dollars", "units": "Units", "ext_units": "Ext Units"}
 
+# ── Manufacturer normalisation for the diff identity key ──────────────────────
+#
+# The DIN matcher's _norm_company strips BOTH legal-form tokens (inc, ltd, gmbh…)
+# AND descriptive words (pharmaceuticals, therapeutics, laboratories…).  That is
+# correct THERE because the matcher pairs it with a fuzzy similarity floor that
+# re-separates distinct firms.  The diff has no such floor — the normalised string
+# is an EXACT-equality bucket key — so a descriptive word that distinguishes two
+# real firms ("Acme Pharma" vs "Acme Therapeutics") must NOT be stripped: doing so
+# folds them to "acme", silently collapsing a true exit + entrant into one
+# (possibly below-threshold, hence dropped) move.  A changes report must never
+# silently lose a market exit/entrant.
+#
+# So the diff strips a deliberately NARROWER set: legal-form suffixes PLUS purely
+# geographic / structural words that never identify a firm (canada, health,
+# healthcare, consumer, "a division of", division).  Firm-distinguishing
+# descriptors (pharma, pharmaceutical(s), therapeutics, laborator*, labs, serono)
+# are KEPT.  Consequences, both safe:
+#   • legal-suffix / geographic jitter ("PFIZER CANADA ULC" ⇄ "PFIZER") still folds
+#     to one identity → reported as a move, never a phantom pair.
+#   • a descriptive-word difference stays split → a VISIBLE exit + entrant pair the
+#     analyst reads as a relabel — the safe failure direction (visible, not silent).
+# Verified on the real extracts to leave entrant/exit/move counts unchanged.
+_CORP_STRIP_DIFF_RE = re.compile(
+    r"\b("
+    r"incorporated|inc|limited|limitee|ltee|ltd\b|llc|llp|ulc|corporation|corp|co\b|"
+    r"sa\b|ag\b|gmbh|plc|sencrl|senc|sec\b|"
+    r"a division of|division|healthcare|health|consumer|canada"
+    r")[.,]*",
+    re.IGNORECASE,
+)
+
+
+def _norm_company_identity(s: object) -> str:
+    """Manufacturer key for the diff: strip legal + geographic words, keep the rest.
+
+    Accent-flatten → lowercase → drop punctuation/separators → remove legal-form and
+    geographic/structural tokens (see _CORP_STRIP_DIFF_RE) → collapse whitespace.
+    Firm-distinguishing descriptors (pharma, therapeutics, laboratories, …) survive,
+    so two different companies are never silently merged into one identity.
+    """
+    if s is None:
+        return ""
+    t = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode("ascii").lower()
+    t = re.sub(r"[.,/&]", " ", t)
+    t = _CORP_STRIP_DIFF_RE.sub(" ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
 
 def _period_label(period: Optional[tuple[int, int]]) -> str:
     """Format a (year, month) MAT period as 'YYYY/MM', or '—' when unknown."""
@@ -65,18 +115,54 @@ def _period_label(period: Optional[tuple[int, int]]) -> str:
     return f"{period[0]}/{period[1]:02d}"
 
 
+def _label_metric_periods(
+    df: pd.DataFrame,
+    bare_period: Optional[tuple[int, int]],
+    old_period: Optional[tuple[int, int]],
+    new_period: Optional[tuple[int, int]],
+) -> pd.DataFrame:
+    """Return a copy of a signal frame with metric headers carrying their MAT period.
+
+    The diff compares the single newest MAT period of each file (a MAT is already a
+    rolling 12-month total), so a bare 'Dollars' header hides WHICH period the value
+    is.  Embed it so the reader cannot mistake the figure for an all-time or
+    multi-period total:
+
+      • single-column metric 'Dollars' (entrants/exits) → 'Dollars (MAT <bare_period>)'
+        — caller passes new_period for entrants, old_period for exits.
+      • move 'Dollars Old' / 'Dollars New'              → '… (MAT <old>)' / '… (MAT <new>)'
+        ('Δ' / 'Δ%' span both periods, so they are left unlabelled).
+
+    Applied only at workbook-render time; the in-memory frames keep canonical names.
+    """
+    bare_lbl = _period_label(bare_period)
+    old_lbl, new_lbl = _period_label(old_period), _period_label(new_period)
+    rename: dict[str, str] = {}
+    for k in _METRICS:
+        base = _METRIC_LABEL[k]
+        if base in df.columns:                       # entrants / exits: single column
+            rename[base] = f"{base} (MAT {bare_lbl})"
+        if f"{base} Old" in df.columns:              # moves: old/new column pair
+            rename[f"{base} Old"] = f"{base} Old (MAT {old_lbl})"
+            rename[f"{base} New"] = f"{base} New (MAT {new_lbl})"
+    return df.rename(columns=rename)
+
+
 def _identity(molecule: object, product: object, manufacturer: object, strength: object) -> tuple:
     """Normalised cross-file identity key for one product group.
 
-    Reuses the matcher's normalisation so trivial formatting differences between
-    quarters (legal-suffix changes, whitespace, trailing form words, strength
-    punctuation) do not split one product into a phantom exit + entrant pair.
+    Normalises so trivial formatting differences between quarters (legal-suffix
+    changes, geographic words, whitespace, trailing form words, strength
+    punctuation) do not split one product into a phantom exit + entrant pair.  Brand
+    and strength reuse the matcher's helpers; the manufacturer uses the diff's own
+    _norm_company_identity (legal + geographic stripping, firm-distinguishing words
+    KEPT) so two distinct firms are never silently merged — see that function.
     """
     mol = " ".join(str(molecule or "").split()).upper()
     return (
         mol,
         _norm_brand(product),
-        _norm_company(manufacturer),
+        _norm_company_identity(manufacturer),
         tuple(sorted(_norm_strength(strength))),
     )
 
@@ -144,6 +230,35 @@ def _pct(delta: int, base: int) -> Optional[float]:
     if not base:
         return None
     return round(delta / base * 100.0, 1)
+
+
+def _sort_signal(df: pd.DataFrame) -> pd.DataFrame:
+    """Order an entrants/exits frame so a product's strengths stay together.
+
+    A plain Dollars-descending sort scatters one product's strengths across the
+    sheet — e.g. BRUKINSA 80MG (a ~$190M exit) lands at the top while its 160MG
+    sibling (~$87k) sinks ~80 rows down, so the small strength reads as "missing"
+    even though every entrant/exit is present regardless of size.
+
+    Instead: keep the documented "largest first" intent at the PRODUCT level — rank
+    each product group (Combined Molecule × Product × Manufacturer) by its total
+    Dollars — but hold all of that product's strengths adjacent, ordered by Dollars
+    within the group.  Nothing is dropped or thresholded; only the row order changes.
+    """
+    if df.empty:
+        return df
+    grp = ["Combined Molecule", "Product", "Manufacturer"]
+    group_total = df.groupby(grp)["Dollars"].transform("sum")
+    return (
+        df.assign(_grp_total=group_total)
+        .sort_values(
+            ["_grp_total"] + grp + ["Dollars"],
+            ascending=[False, True, True, True, False],
+            kind="mergesort",
+        )
+        .drop(columns="_grp_total")
+        .reset_index(drop=True)
+    )
 
 
 @dataclass
@@ -239,10 +354,8 @@ def compare_iqvia(old_bytes: bytes, new_bytes: bytes) -> IqviaDiff:
     exits = pd.DataFrame(exit_rows, columns=entrant_cols)
     moves = pd.DataFrame(move_rows, columns=move_cols)
 
-    if not entrants.empty:
-        entrants = entrants.sort_values("Dollars", ascending=False, kind="mergesort").reset_index(drop=True)
-    if not exits.empty:
-        exits = exits.sort_values("Dollars", ascending=False, kind="mergesort").reset_index(drop=True)
+    entrants = _sort_signal(entrants)
+    exits = _sort_signal(exits)
     if not moves.empty:
         moves = (
             moves.assign(_absd=moves["Dollars Δ"].abs())
@@ -289,13 +402,20 @@ def build_diff_workbook(diff: IqviaDiff) -> bytes:
         columns=["Metric", "Value"],
     )
 
+    # Embed the MAT period in each data sheet's metric headers so a single-period
+    # figure is never mistaken for an all-time total. Entrants hold the NEW-file
+    # latest, exits the OLD-file latest; moves carry both. Summary is untagged.
+    entrants = _label_metric_periods(diff.entrants, diff.new_period, diff.old_period, diff.new_period)
+    exits = _label_metric_periods(diff.exits, diff.old_period, diff.old_period, diff.new_period)
+    moves = _label_metric_periods(diff.moves, None, diff.old_period, diff.new_period)
+
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         for name, df in (
             ("Summary", summary),
-            ("New Entrants", diff.entrants),
-            ("Exits", diff.exits),
-            ("Material Moves", diff.moves),
+            ("New Entrants", entrants),
+            ("Exits", exits),
+            ("Material Moves", moves),
         ):
             df.to_excel(writer, sheet_name=name, index=False)
             _style_sheet(writer.sheets[name], df)

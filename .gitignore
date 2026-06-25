@@ -32,6 +32,6 @@ htmlcov/
 *.swp
 *.swo
 
-# Claude Code internal
+# Local agent / assistant working directories
 .claude/
 memory/

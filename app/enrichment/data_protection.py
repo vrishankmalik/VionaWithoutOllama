@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 from difflib import get_close_matches
+from functools import lru_cache
 from typing import Optional
 
 import httpx
@@ -52,6 +53,11 @@ _STRENGTH_RE = re.compile(
 
 # ── Normalisation ─────────────────────────────────────────────────────────────
 
+# Memoized: both are pure string→string transforms called once per DIN AND once
+# per register row per DIN. At full-universe scale (~13.5k DINs × a few-hundred-row
+# register) the register strings repeat across every DIN, so caching collapses
+# millions of identical normalizations to a few hundred. Behaviour is unchanged.
+@lru_cache(maxsize=None)
 def _normalize_ingredient_dp(s: str) -> str:
     """Strip strength tokens, parentheticals, and casefold for ingredient matching."""
     s = s.lower().strip()
@@ -60,6 +66,7 @@ def _normalize_ingredient_dp(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+@lru_cache(maxsize=None)
 def _normalize_manufacturer(s: str) -> str:
     """Strip corporate suffixes, punctuation, and casefold for manufacturer matching."""
     s = s.lower().strip()

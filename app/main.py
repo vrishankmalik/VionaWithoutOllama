@@ -101,7 +101,7 @@ async def _limit_upload_size(request: Request, call_next):
             from fastapi.responses import JSONResponse
             return JSONResponse(
                 status_code=413,
-                content={"detail": f"Upload too large — maximum total size is {limit // (1024 * 1024)} MB."},
+                content={"detail": f"Upload too large. The maximum total size is {limit // (1024 * 1024)} MB."},
             )
     return await call_next(request)
 
@@ -188,7 +188,7 @@ async def export(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"Source(s) failed: {names} — refusing to build a partial workbook. "
+                f"Source(s) failed: {names}. Refusing to build a partial workbook. "
                 f"Pass allow_partial=true to override. Details: {details}"
             ),
         )
@@ -436,11 +436,32 @@ async def fabric_push(
 
 @app.post("/api/reset-all-caches")
 async def reset_all_caches() -> dict:
-    """Clear all cached data: HTTP cache, patents, and labeling."""
+    """Clear all cached data: HTTP cache, patents, labeling, and full universe."""
+    from app.enrichment.universe import reset_universe_cache
     http_rows = cache_clear_all()
     patent_rows = reset_patents_table()
     labeling_rows = reset_labeling_table()
-    return {"status": "ok", "http_rows_cleared": http_rows, "patent_rows_cleared": patent_rows, "labeling_rows_cleared": labeling_rows}
+    universe_cleared = reset_universe_cache()
+    return {
+        "status": "ok",
+        "http_rows_cleared": http_rows,
+        "patent_rows_cleared": patent_rows,
+        "labeling_rows_cleared": labeling_rows,
+        "universe_cleared": universe_cleared,
+    }
+
+
+@app.get("/api/dosage-forms")
+async def dosage_forms() -> dict:
+    """Base dosage-form list for the filter dropdown (used by BOTH tabs).
+
+    Sourced from the cached full-universe build (base→raw map on the bundle), so it
+    rides the same 4-hour freshness and reset-all-caches invalidation. The first
+    call may trigger the allfiles.zip pull; subsequent calls return instantly.
+    """
+    from app.enrichment.universe import get_universe
+    bundle = await get_universe()
+    return {"base_forms": sorted(bundle.dosage_form_map.keys())}
 
 
 # ── IQVIA upload ──────────────────────────────────────────────────────────────
@@ -471,7 +492,7 @@ async def iqvia_upload(request: Request) -> dict:
     form = await request.form(max_files=1, max_fields=0, max_part_size=_MAX_UPLOAD_BYTES)
     file_field = form.get("file")
     if file_field is None or not hasattr(file_field, "read"):
-        raise HTTPException(400, "No file field in upload — field must be named 'file'")
+        raise HTTPException(400, "No file field in upload. The field must be named 'file'.")
 
     filename = getattr(file_field, "filename", "") or ""
     if not filename.lower().endswith((".xlsx", ".xls")):
@@ -556,10 +577,26 @@ async def iqvia_compare(request: Request) -> Response:
         raise HTTPException(422, f"Could not compare IQVIA files: {exc}") from exc
 
     fname = f"iqvia_changes_{_period_tag(diff.old_period)}_to_{_period_tag(diff.new_period)}.xlsx"
+    # Surface the auto-reorder decision + resolved periods to the browser so the
+    # in-page UI can render the same older->newer notice the Excel Summary carries
+    # (the workbook banner is unchanged). Header values are kept ASCII (latin-1) and
+    # exposed for the cross-origin case; same-origin reads need no expose list.
+    headers = {
+        "Content-Disposition": f'attachment; filename="{fname}"',
+        "X-IQVIA-Reordered": "true" if diff.reordered else "false",
+        "X-IQVIA-Old-Period": _period_tag(diff.old_period),
+        "X-IQVIA-New-Period": _period_tag(diff.new_period),
+        "Access-Control-Expose-Headers": (
+            "Content-Disposition, X-IQVIA-Reordered, X-IQVIA-Old-Period, "
+            "X-IQVIA-New-Period, X-IQVIA-Warning"
+        ),
+    }
+    if diff.warnings:
+        headers["X-IQVIA-Warning"] = " | ".join(diff.warnings)
     return Response(
         content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        headers=headers,
     )
 
 
@@ -613,7 +650,7 @@ async def export_start(req: ExportStartRequest) -> dict:
     """
     qs = _resolve_queries(req)
     if not qs:
-        raise HTTPException(400, "No query provided — set q or queries")
+        raise HTTPException(400, "No query provided. Set q or queries.")
     job_id = uuid.uuid4().hex
     job = create_job(
         job_id, qs[0], req.field, queries=qs,
@@ -625,6 +662,52 @@ async def export_start(req: ExportStartRequest) -> dict:
         run_export_job(job, req.allow_partial, req.enable_ocr)
     )
     return {"job_id": job_id, "queries": qs}
+
+
+# ── Full-universe tab (options 3 & 4) — additive, separate from the export path ─
+
+class UniverseStartRequest(BaseModel):
+    mode: str = "full"                 # "full" (option 3) | "filter_enrich" (option 4)
+    enable_ocr: bool = True
+    iqvia_token: Optional[str] = None
+    debug_iqvia_rows: bool = False
+    filter_criteria: list[dict] = []   # six-criteria; required for filter_enrich
+
+
+@app.post("/universe/start")
+async def universe_start(req: UniverseStartRequest) -> dict:
+    """Start a Full-universe job (no-PDF universe, or filter-then-enrich survivors).
+
+    Reuses the same job store + SSE stream + result endpoints as /export/start, so
+    progress and download work identically.  This path never touches the
+    single/multi-ingredient export pipeline.
+    """
+    from app.universe_job import run_universe_full_job, run_universe_filter_enrich_job
+
+    if req.mode not in ("full", "filter_enrich"):
+        raise HTTPException(400, "mode must be 'full' or 'filter_enrich'")
+    if req.mode == "filter_enrich" and not req.filter_criteria:
+        raise HTTPException(400, "filter_enrich requires at least one filter criterion")
+
+    job_id = uuid.uuid4().hex
+    job = create_job(
+        job_id, "Full universe", "ingredient",
+        iqvia_token=req.iqvia_token,
+        debug_iqvia_rows=req.debug_iqvia_rows,
+        filter_criteria=req.filter_criteria,
+    )
+    if req.mode == "full":
+        asyncio.create_task(run_universe_full_job(job))
+    else:
+        asyncio.create_task(run_universe_filter_enrich_job(job, req.enable_ocr))
+    return {"job_id": job_id, "mode": req.mode}
+
+
+@app.get("/api/universe/status")
+async def universe_status() -> dict:
+    """Report whether a fresh (≤4 h) universe build is cached this session."""
+    from app.enrichment.universe import universe_cache_status
+    return universe_cache_status()
 
 
 @app.get("/export/stream/{job_id}")
@@ -733,7 +816,7 @@ async def export_data_json(job_id: str) -> dict:
     if job is None:
         raise HTTPException(404, "Job not found")
     if job.status == "running":
-        raise HTTPException(409, "Job still running — wait for SSE complete event")
+        raise HTTPException(409, "Job still running. Wait for the SSE complete event.")
     if job.status == "error":
         raise HTTPException(422, f"Job failed: {job.error}")
     result: dict = {
@@ -778,6 +861,7 @@ _IQVIA_COMPARE_HTML = """<!DOCTYPE html>
   * { box-sizing:border-box; }
   body { font-family:"Inter",system-ui,sans-serif; color:var(--text); background:var(--bg); margin:0; }
   .site-nav { display:flex; align-items:center; gap:14px; padding:10px 28px; background:var(--primary-dark); color:#fff; font-size:0.86rem; }
+  .nav-zydus-logo { height:26px; width:auto; flex-shrink:0; filter:brightness(0) invert(1); opacity:0.92; }
   .site-nav a { color:#f4e8f2; text-decoration:none; }
   .site-nav a:hover { text-decoration:underline; }
   .site-nav-brand { font-family:"Exo",sans-serif; font-weight:700; font-size:1.05rem; }
@@ -808,13 +892,14 @@ _IQVIA_COMPARE_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <nav class="site-nav" role="navigation">
+  <img class="nav-zydus-logo" src="/static/zydus_logo.png" alt="Zydus" />
   <span class="site-nav-brand">Zydus</span><span class="site-nav-sub">Dedicated To Life</span>
   <span class="site-nav-divider"></span>
   <a href="/">&larr; Search Platform</a>
 </nav>
 <header>
   <h1>IQVIA Quarter-over-Quarter Compare</h1>
-  <p>Upload last quarter's IQVIA Canada extract and this quarter's, then download an Excel of <b>only what changed</b> &mdash; new entrants, exits, and material moves at the product grain. The latest MAT period is resolved inside each file independently, so the two files need not share column names or date formats (.xlsx and .csv both accepted).</p>
+  <p>Upload last quarter's IQVIA Canada file and this quarter's. You get an Excel of <b>only what changed</b>: new products, products that dropped off, and big moves in dollars or units. The two files can use different column names or date formats; we find the latest period inside each one. (.xlsx and .csv both work.)</p>
 </header>
 <div class="container">
   <div class="card">
@@ -835,9 +920,9 @@ _IQVIA_COMPARE_HTML = """<!DOCTYPE html>
       <span id="status"></span>
     </div>
     <div class="note">
-      <b>What counts as a change?</b> A MAT total drifts on nearly every row every period, so an exact-difference diff is noise.
-      A product is reported as a <b>material move</b> only when Dollars or Units shifts by both an absolute floor and a percent floor;
-      <b>entrants</b> (newly on market) and <b>exits</b> (gone) are always shown. Each moved row shows old&nbsp;&rarr;&nbsp;new&nbsp;&rarr;&nbsp;&Delta;&nbsp;(absolute and %).
+      <b>What counts as a change?</b> Almost every row moves a little each period, so listing every tiny difference is just noise.
+      We call it a <b>material move</b> only when Dollars or Units shifts by both a dollar/unit amount and a percent.
+      <b>New products</b> (just on market) and <b>exits</b> (now gone) are always shown. Each moved row shows old, new, and the change (as a number and a percent).
     </div>
   </div>
 </div>
@@ -927,6 +1012,13 @@ _HTML_UI = """<!DOCTYPE html>
     height: 52px;
     gap: 16px;
   }
+  .nav-zydus-logo {
+    height: 28px;
+    width: auto;
+    flex-shrink: 0;
+    filter: brightness(0) invert(1);
+    opacity: 0.92;
+  }
   .site-nav-brand-wrap { display: flex; flex-direction: column; gap: 0; }
   .site-nav-brand {
     font-family: "Exo", sans-serif;
@@ -966,6 +1058,13 @@ _HTML_UI = """<!DOCTYPE html>
     align-items: center;
     gap: 18px;
     margin-bottom: 10px;
+  }
+  .header-logo-zydus {
+    height: 40px;
+    width: auto;
+    flex-shrink: 0;
+    filter: brightness(0) invert(1);
+    opacity: 0.88;
   }
   .header-company-name {
     font-size: 0.68rem;
@@ -1141,13 +1240,12 @@ _HTML_UI = """<!DOCTYPE html>
     color: var(--err);
   }
   .info-box {
-    background: #EBF0FA;
-    border: 1px solid #B8C9F2;
-    border-left: 4px solid var(--primary);
-    border-radius: 3px;
-    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin-bottom: 22px;
     font-size: 0.88rem;
-    color: var(--muted);
+    color: var(--primary);
   }
 
   /* ── Data table ──────────────────────────────────────────────────────── */
@@ -1343,22 +1441,31 @@ _HTML_UI = """<!DOCTYPE html>
   </div>
   <span class="site-nav-divider"></span>
   <a class="site-nav-link" href="https://health-products.canada.ca/dpd-bdpp/" target="_blank" rel="noopener">DPD</a>
+  <a class="site-nav-link" href="https://www.canada.ca/en/health-canada/services/drug-health-product-review-approval/generic-submissions-under-review.html" target="_blank" rel="noopener">Generic Submissions</a>
   <a class="site-nav-link" href="https://health-products.canada.ca/noc-ac/" target="_blank" rel="noopener">NOC</a>
   <a class="site-nav-link" href="https://pr-rdb.hc-sc.gc.ca/pr-rdb/" target="_blank" rel="noopener">Patent Register</a>
-  <span class="site-nav-divider"></span>
-  <a class="site-nav-link" href="/iqvia-compare">IQVIA Compare</a>
 </nav>
 <header role="banner">
   <div class="header-brand-row">
+    <img class="header-logo-zydus" src="/static/zydus_logo.png" alt="Zydus" />
     <div>
       <div class="header-company-name">Zydus &nbsp;&middot;&nbsp; Dedicated To Life</div>
       <h1>Drug Intelligence Platform</h1>
     </div>
   </div>
-  <p>Simultaneous search across DPD &middot; Generic Submissions Under Review &middot; Notice of Compliance &middot; Patent Register</p>
+  <p>Type a drug ingredient and we check all four Canadian government drug databases at once: the Drug Product Database (DPD), Generic Submissions Under Review, Notice of Compliance (NOC), and the Patent Register.</p>
 </header>
 <div class="container">
+  <div class="dash-tab-bar" style="margin-bottom:0;">
+    <button class="dash-tab active" id="mainTabSearch" type="button" onclick="switchMainTab('search')">Search by ingredient(s)</button>
+    <button class="dash-tab" id="mainTabUniverse" type="button" onclick="switchMainTab('universe')">Full universe</button>
+    <button class="dash-tab" id="mainTabIqvia" type="button" onclick="switchMainTab('iqvia')">IQVIA Compare</button>
+  </div>
+  <div id="paneSearch" class="main-pane">
   <div class="search-box">
+    <div class="info-box">
+      <b>What this does.</b> Type one or more drug ingredients. We look them up in all four databases and show what we find. Press <b>Download Excel</b> for the full report, or <b>Download Filtered Excel</b> to keep only the products that pass the rules you set below.
+    </div>
     <div class="row">
       <div class="field-group" style="flex:1">
         <label for="query">Ingredients <span id="queryCount" style="font-weight:400;color:var(--muted);font-size:0.72rem">(one per line or comma-separated; export runs all)</span></label>
@@ -1394,17 +1501,109 @@ _HTML_UI = """<!DOCTYPE html>
     </div>
 
     <!-- Go/No-Go screening criteria — used only by the "Download Filtered Excel" action. -->
-    <details class="filter-box" id="filterBox" style="margin-top:14px;border:1px solid var(--border);border-radius:4px;padding:0 14px;background:#fff;">
+    <details class="filter-box" id="filterBox" ontoggle="if(this.open) populateDosageForms()" style="margin-top:14px;border:1px solid var(--border);border-radius:4px;padding:0 14px;background:#fff;">
       <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--primary-dark);padding:11px 2px;list-style:revert;">
         Go / No-Go Filter Criteria
-        <span style="font-weight:400;color:var(--muted);font-size:0.78rem">&nbsp;— optional; fill only the rows you want. All filled rows are combined with AND.</span>
+        <span style="font-weight:400;color:var(--muted);font-size:0.78rem">&nbsp;(optional). Fill only the rows you care about. A product is kept only if it passes every row you filled in.</span>
       </summary>
       <div id="criteriaRows" style="padding:4px 0 6px;display:flex;flex-direction:column;gap:7px;"></div>
       <div id="iqviaCritNote" style="font-size:0.74rem;color:var(--warn);padding-bottom:11px;display:none;">
-        ⚠ Value / Quantity criteria require an IQVIA file — upload one above to enable them.
+        ⚠ Value / Quantity rules need an IQVIA file. Upload one above to turn them on.
       </div>
+      <div id="extraCriteria" style="padding:4px 0 11px;"></div>
     </details>
-  </div>
+  </div><!-- /paneSearch -->
+
+  <!-- Full universe tab (options 3 & 4) — new, separate from the frozen search path -->
+  <div id="paneUniverse" class="main-pane" style="display:none">
+    <div class="search-box">
+      <div class="info-box">
+        <b>See the whole market.</b> Download every product in the Drug Product Database, including older
+        grandfathered (pre-NOC) products. It does not read the slow Product-Monograph PDFs up front. NOC,
+        patent, and data-protection columns stay blank when there is no record. Add an IQVIA file to attach
+        market size and a match-confidence check.
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;flex-wrap:wrap;">
+        <label style="font-size:0.8rem;color:var(--muted);white-space:nowrap;cursor:pointer;" for="iqviaFileU">IQVIA file (optional):</label>
+        <input type="file" id="iqviaFileU" accept=".xlsx,.xls"
+          style="font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:3px 6px;background:#fff;cursor:pointer;max-width:220px;"
+          onchange="uploadIqviaU(this)">
+        <span id="iqviaStatusU" style="font-size:0.78rem;color:var(--muted)"></span>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div style="font-weight:600;font-size:0.92rem;color:var(--primary-dark);">3 · Full universe sheet (no PDF data)</div>
+        <p style="font-size:0.8rem;color:var(--muted);margin:4px 0 8px;">
+          The whole list, fast. It skips reading the Product-Monograph PDFs, which would take hours for the full market. A note at the top of the file says so.
+        </p>
+        <button class="btn btn-export" id="universeFullBtn" type="button" onclick="doUniverse('full')"
+          title="Build and download the full no-PDF universe workbook">⬇ Download full universe (no PDF)</button>
+      </div>
+
+      <details class="filter-box" id="filterBoxU" ontoggle="if(this.open) populateDosageForms()" style="margin-top:16px;border:1px solid var(--border);border-radius:4px;padding:0 14px;background:#fff;">
+        <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--primary-dark);padding:11px 2px;list-style:revert;">
+          4 · Filter &amp; enrich (Go / No-Go criteria)
+          <span style="font-weight:400;color:var(--muted);font-size:0.78rem">&nbsp;Set your rules first. We filter the whole universe, then read PDF data only for the products that pass.</span>
+        </summary>
+        <div id="criteriaRowsU" style="padding:4px 0 6px;display:flex;flex-direction:column;gap:7px;"></div>
+        <div id="iqviaCritNoteU" style="font-size:0.74rem;color:var(--warn);padding-bottom:11px;display:none;">
+          ⚠ Value / Quantity rules need an IQVIA file. Upload one above to turn them on.
+        </div>
+        <div id="extraCriteriaU" style="padding:4px 0 11px;"></div>
+      </details>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary" id="universeFilterBtn" type="button" onclick="doUniverse('filter_enrich')"
+          title="Apply the six criteria across the whole universe, then enrich only the survivors with PDF data">⬇ Filter &amp; enrich (full PDF data)</button>
+      </div>
+
+      <div class="note" id="universeCacheNote" style="margin-top:16px;font-size:0.78rem;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:12px;">
+        The full-universe dataset is cached for 4 hours. Click <b>Reset cache</b> (on the Search tab) to force a fresh pull from DPD.
+      </div>
+    </div>
+  </div><!-- /paneUniverse -->
+
+  <!-- IQVIA quarter-over-quarter compare tab -->
+  <div id="paneIqvia" class="main-pane" style="display:none">
+    <div class="search-box">
+      <div class="info-box">
+        <b>Quarter-over-quarter change report.</b> Upload the previous quarter's IQVIA Canada extract alongside
+        the current quarter's. The tool produces an Excel report containing <b>only the changes</b>: newly
+        introduced products, products that have exited the market, and material movements in dollars or units.
+        The two files may use different column names or date formats; the latest reporting period is resolved
+        independently within each file. Supported formats: .xlsx, .xls, and .csv.
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <div class="field-group" style="flex:1;min-width:260px;">
+          <label for="cmpOldFile">1 · Previous-quarter extract <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;">(prior reporting period)</span></label>
+          <input type="file" id="cmpOldFile" accept=".xlsx,.xls,.csv" onchange="refreshCompare()"
+            style="font-size:0.82rem;border:1px solid var(--border);border-radius:3px;padding:6px;background:#fff;cursor:pointer;">
+        </div>
+        <div class="field-group" style="flex:1;min-width:260px;">
+          <label for="cmpNewFile">2 · Current-quarter extract <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;">(current reporting period)</span></label>
+          <input type="file" id="cmpNewFile" accept=".xlsx,.xls,.csv" onchange="refreshCompare()"
+            style="font-size:0.82rem;border:1px solid var(--border);border-radius:3px;padding:6px;background:#fff;cursor:pointer;">
+        </div>
+      </div>
+
+      <div style="margin-top:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <button class="btn btn-export" id="cmpGoBtn" type="button" onclick="runCompare()" disabled
+          title="Compare the two extracts and download an Excel report of the changes">⬇ Download Change Report</button>
+        <span id="cmpStatus" style="font-size:0.84rem;color:var(--muted)"></span>
+      </div>
+
+      <!-- Reorder / same-period notice, mirrored from the Excel Summary banner. -->
+      <div id="cmpNotice" style="display:none;margin-top:14px;border-radius:4px;padding:12px 16px;font-size:0.88rem;line-height:1.5;"></div>
+
+      <div class="note">
+        <b>Methodology.</b> MAT totals fluctuate marginally on nearly every row in each period, so a direct
+        difference would report predominantly noise. A product is classified as a <b>material move</b> only when
+        its Dollars or Units shift exceeds both an absolute and a percentage threshold. Market <b>entrants</b>
+        (newly available) and <b>exits</b> (discontinued) are always reported, irrespective of magnitude. Each
+        moved row presents the prior value&nbsp;&rarr;&nbsp;current value&nbsp;&rarr;&nbsp;change&nbsp;(absolute and %).
+      </div>
+    </div>
+  </div><!-- /paneIqvia -->
 
   <!-- Export progress panel (shown while job runs) -->
   <div class="export-panel" id="exportPanel">
@@ -1439,8 +1638,8 @@ _HTML_UI = """<!DOCTYPE html>
 <footer role="contentinfo">
   <strong style="color:var(--primary);font-family:'Exo',sans-serif">Zydus</strong> <span style="color:var(--muted);font-size:0.76rem">· Dedicated To Life</span>
   <br/>
-  Data sourced from Canadian government public databases (DPD, NOC, Patent Register, GSUR). &nbsp;|&nbsp;
-  Accuracy relies on deterministic extraction. No generated data fields.
+  All data comes from public Canadian government databases (DPD, Generic Submissions Under Review, NOC, Patent Register). &nbsp;|&nbsp;
+  Every value is copied straight from the source. Nothing is guessed or made up.
 </footer>
 
 <script>
@@ -1474,9 +1673,9 @@ function updateQueryCount() {
   if (qs.length === 0) {
     hint.textContent = '';
   } else if (qs.length === 1) {
-    hint.textContent = `1 ingredient — exported on its own.`;
+    hint.textContent = `1 ingredient, exported on its own.`;
   } else {
-    hint.textContent = `${qs.length} ingredients: ${qs.map(q => '”' + q + '”').join(', ')} — exported side-by-side.`;
+    hint.textContent = `${qs.length} ingredients: ${qs.map(q => '"' + q + '"').join(', ')}, exported side by side.`;
   }
 }
 
@@ -1492,9 +1691,9 @@ const CRITERIA_DEFS = [
   { metric: 'competitors',  label: 'Number of Competitors',     iqvia: false },
   { metric: 'filings',      label: 'Number of Filings',          iqvia: false },
   { metric: 'approvals',    label: 'Number of Approvals',        iqvia: false },
-  { metric: 'value',        label: 'Value Sizeable ($)',         iqvia: true  },
-  { metric: 'quantity',     label: 'Quantity Sizeable (Units)',  iqvia: true  },
-  { metric: 'quantity_ext', label: 'Quantity Ext Sizeable',      iqvia: true  },
+  { metric: 'value',        label: 'Value ($)',                  iqvia: true  },
+  { metric: 'quantity',     label: 'Quantity (Units)',           iqvia: true  },
+  { metric: 'quantity_ext', label: 'Quantity Ext (Units)',       iqvia: true  },
 ];
 
 function buildCriteriaRows() {
@@ -1547,7 +1746,96 @@ function collectCriteria() {
     if (!isFinite(value)) throw new Error(`"${d.label}" value must be a number.`);
     out.push({ metric: d.metric, operator: op, value });
   }
+  collectExtraCriteria('s', out);
   return out;
+}
+
+// ---- Two additive filters: dosage form + six-year no-file date (BOTH tabs) ----
+
+// no-file-date operators (distinct from the numeric above/below/exactly set).
+const NO_FILE_OPS = [
+  { value: 'less',              label: 'before (<)'      },
+  { value: 'greater',           label: 'after (>)'       },
+  { value: 'greater_or_equal',  label: 'on or after (≥)' },
+  { value: 'equal',             label: 'on (=)'          },
+];
+
+// Render the dosage-form multi-select + no-file-date row for one tab (suffix
+// 's' = Search, 'u' = Universe). Identical option set on both tabs.
+function buildExtraCriteria(suffix, containerId) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const opOpts = ['<option value="">(choose)</option>']
+    .concat(NO_FILE_OPS.map(o => `<option value="${o.value}">${o.label}</option>`)).join('');
+  wrap.innerHTML = `
+    <div class="crit-row" style="display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap;margin-top:2px;">
+      <label style="min-width:230px;font-size:0.86rem;padding-top:4px;">Dosage form
+        <span style="display:block;font-weight:400;color:var(--muted);font-size:0.72rem;">base form; matches every sub-form (e.g. TABLET also matches TABLET (EXTENDED-RELEASE))</span>
+      </label>
+      <select id="dform_${suffix}" multiple size="6"
+        style="min-width:240px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;font-size:0.84rem;">
+        <option disabled>open this panel to load…</option>
+      </select>
+    </div>
+    <div class="crit-row" style="display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap;margin-top:9px;">
+      <label style="min-width:230px;font-size:0.86rem;padding-top:4px;">Six-year no-file date
+        <span style="display:block;font-weight:400;color:var(--muted);font-size:0.72rem;">Month / Day / Year; future dates only</span>
+      </label>
+      <select id="nofileop_${suffix}" style="padding:4px 8px;border:1px solid var(--border);border-radius:3px;font-size:0.84rem;">${opOpts}</select>
+      <input type="text" id="nofileval_${suffix}" placeholder="MM/DD/YYYY" maxlength="10"
+        style="width:130px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;font-size:0.84rem;">
+    </div>`;
+}
+
+// Populate BOTH tabs' dosage-form dropdowns from the cached universe list. Fetched
+// once, lazily, when a filter panel is first opened (avoids forcing the universe
+// pull on plain Search use).
+let _dosageFormsLoaded = false;
+async function populateDosageForms() {
+  const sels = ['dform_s', 'dform_u'].map(id => document.getElementById(id)).filter(Boolean);
+  if (!sels.length || _dosageFormsLoaded) return;
+  sels.forEach(s => { s.innerHTML = '<option disabled>Loading dosage forms…</option>'; });
+  try {
+    const resp = await fetch('/api/dosage-forms');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const opts = (data.base_forms || [])
+      .map(f => `<option value="${escHtml(f)}">${escHtml(f)}</option>`).join('');
+    sels.forEach(s => { s.innerHTML = opts; });
+    _dosageFormsLoaded = true;
+  } catch (e) {
+    sels.forEach(s => { s.innerHTML = '<option disabled>Failed to load. Reopen to retry</option>'; });
+  }
+}
+
+// Validate a user MM/DD/YYYY string: well-formed calendar date AND in the future.
+function _checkFutureMdy(s) {
+  const m = new RegExp('^([0-9]{2})/([0-9]{2})/([0-9]{4})$').exec(s);
+  if (!m) throw new Error(`Six-year no-file date must be MM/DD/YYYY (Month/Day/Year): ${s}`);
+  const mm = +m[1], dd = +m[2], yyyy = +m[3];
+  const d = new Date(yyyy, mm - 1, dd);
+  if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd)
+    throw new Error(`Invalid calendar date (MM/DD/YYYY): ${s}`);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (d <= today) throw new Error(`Six-year no-file date must be in the future: ${s}`);
+}
+
+// Append the two additive filter entries (if set) to a criteria list. Throws on
+// a partially-filled / invalid date so input errors abort early, like the six.
+function collectExtraCriteria(suffix, out) {
+  const dsel = document.getElementById(`dform_${suffix}`);
+  if (dsel) {
+    const picked = Array.from(dsel.selectedOptions).map(o => o.value).filter(Boolean);
+    if (picked.length) out.push({ metric: 'dosage_form', value: picked });
+  }
+  const op = (document.getElementById(`nofileop_${suffix}`) || {}).value || '';
+  const val = ((document.getElementById(`nofileval_${suffix}`) || {}).value || '').trim();
+  if (op || val) {
+    if (!op) throw new Error('Pick an operator for the six-year no-file date, or clear the date.');
+    if (!val) throw new Error('Enter a six-year no-file date (MM/DD/YYYY), or clear the operator.');
+    _checkFutureMdy(val);
+    out.push({ metric: 'no_file_date', operator: op, value: val });
+  }
 }
 
 // ---- Async export with SSE progress ----
@@ -1786,7 +2074,7 @@ async function uploadIqvia(input) {
     const resp = await fetch('/api/iqvia/upload', { method: 'POST', body: fd });
     let data;
     try { data = await resp.json(); } catch (_) { data = {}; }
-    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status} — server rejected the file (check it is a valid .xlsx)`);
+    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}: the server rejected the file (check it is a valid .xlsx)`);
     _iqviaToken = data.token;
     status.style.color = 'var(--muted)';
     status.textContent = `✓ Loaded`;
@@ -1826,7 +2114,7 @@ async function _loadDashboard(jobId) {
     const queryStr = qs.length === 1 ? `"${data.query}"` : `${qs.length} products: ${qs.map(q => '"' + q + '"').join(', ')}`;
     const hasIqvia = !!data.reconciliation;
     const canary = [
-      `✓ Dashboard loaded from job snapshot — NO new outbound requests`,
+      `✓ Dashboard loaded from the saved job results. No new outbound requests.`,
       `  Sheet 1: ${s1.records.length} rows × ${s1.columns.length} columns`,
       `  Sheet 2: ${s2.records.length} rows × ${s2.columns.length} columns`,
       hasIqvia ? `  IQVIA reconciliation: ${data.reconciliation.records.length} entries` : '',
@@ -1856,7 +2144,7 @@ async function _loadDashboard(jobId) {
       sheet1_cols: s1.columns.length,
       sheet2_rows: s2.records.length,
       job_id: jobId,
-      note: 'No new scraping — data read from job.sheet1_records (same as XLSX)',
+      note: 'No new scraping; data read from job.sheet1_records (same as XLSX)',
     });
   } catch (e) {
     document.getElementById('dashSheet1').innerHTML =
@@ -1864,8 +2152,285 @@ async function _loadDashboard(jobId) {
   }
 }
 
+// ---- Full universe tab (options 3 & 4) ----
+
+function switchMainTab(name) {
+  document.getElementById('mainTabSearch').classList.toggle('active', name === 'search');
+  document.getElementById('mainTabUniverse').classList.toggle('active', name === 'universe');
+  document.getElementById('mainTabIqvia').classList.toggle('active', name === 'iqvia');
+  document.getElementById('paneSearch').style.display = name === 'search' ? '' : 'none';
+  document.getElementById('paneUniverse').style.display = name === 'universe' ? '' : 'none';
+  document.getElementById('paneIqvia').style.display = name === 'iqvia' ? '' : 'none';
+  if (name === 'universe') {
+    setUniverseIqviaEnabled(!!_iqviaToken);
+    refreshUniverseCacheNote();
+  }
+}
+
+// ---- IQVIA quarter-over-quarter compare tab ----
+function refreshCompare() {
+  const ok = document.getElementById('cmpOldFile').files.length && document.getElementById('cmpNewFile').files.length;
+  document.getElementById('cmpGoBtn').disabled = !ok;
+}
+
+async function runCompare() {
+  const oldF = document.getElementById('cmpOldFile').files[0];
+  const newF = document.getElementById('cmpNewFile').files[0];
+  const btn = document.getElementById('cmpGoBtn');
+  const status = document.getElementById('cmpStatus');
+  const notice = document.getElementById('cmpNotice');
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Comparing… (large files take a moment)';
+  if (notice) notice.style.display = 'none';
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('old_file', oldF);
+  fd.append('new_file', newF);
+  try {
+    const resp = await fetch('/api/iqvia/compare', { method: 'POST', body: fd });
+    if (!resp.ok) {
+      let msg = 'HTTP ' + resp.status;
+      try { const j = await resp.json(); if (j.detail) msg = j.detail; } catch (e) {}
+      throw new Error(msg);
+    }
+    const blob = await resp.blob();
+    let fname = 'iqvia_changes.xlsx';
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    if (m) fname = m[1];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+    status.style.color = 'var(--ok)';
+    status.textContent = '✓ Downloaded ' + fname;
+    _showCompareNotice(resp);
+  } catch (err) {
+    status.style.color = 'var(--err)';
+    status.textContent = '✗ ' + err.message;
+  } finally {
+    btn.disabled = false; refreshCompare();
+  }
+}
+
+// Render the older->newer reorder banner (or same-period info note) from the
+// compare response headers. Mirrors the Excel Summary banner so the on-screen
+// user sees the same correction the workbook records.
+function _showCompareNotice(resp) {
+  const notice = document.getElementById('cmpNotice');
+  if (!notice) return;
+  const reordered = (resp.headers.get('X-IQVIA-Reordered') || '') === 'true';
+  const oldP = resp.headers.get('X-IQVIA-Old-Period') || '—';
+  const newP = resp.headers.get('X-IQVIA-New-Period') || '—';
+  const warn = resp.headers.get('X-IQVIA-Warning') || '';
+  if (reordered) {
+    notice.style.background = '#fff3cd';
+    notice.style.border = '1px solid #ffc107';
+    notice.style.borderLeft = '6px solid #e6a500';
+    notice.style.color = '#4a3600';
+    notice.innerHTML = '<b>⚠ Files were uploaded in reverse order.</b> Slot 1 was newer ('
+      + escHtml(newP) + ') than slot 2 (' + escHtml(oldP) + '), so they were automatically '
+      + 'compared older&nbsp;&rarr;&nbsp;newer. In the report, <b>Old</b> = your slot-2 file and '
+      + '<b>New</b> = your slot-1 file.';
+    notice.style.display = 'block';
+  } else if (warn) {
+    notice.style.background = '#E8F4F8';
+    notice.style.border = '1px solid #A8D4E6';
+    notice.style.borderLeft = '4px solid var(--teal)';
+    notice.style.color = 'var(--text)';
+    notice.innerHTML = 'ℹ ' + escHtml(warn);
+    notice.style.display = 'block';
+  } else {
+    notice.style.display = 'none';
+  }
+}
+
+// Tab B renders its own copy of the six criteria (ids prefixed ucrit_) so the
+// frozen Search-tab form is left exactly as-is.
+function buildUniverseCriteriaRows() {
+  const wrap = document.getElementById('criteriaRowsU');
+  if (!wrap) return;
+  wrap.innerHTML = CRITERIA_DEFS.map(d => `
+    <div class="crit-row" data-metric="${d.metric}" data-iqvia="${d.iqvia}"
+         style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:7px;min-width:230px;font-size:0.86rem;cursor:pointer;">
+        <input type="checkbox" id="ucrit_${d.metric}_on">
+        <span>${d.label}</span>
+      </label>
+      <select id="ucrit_${d.metric}_op" style="padding:4px 8px;border:1px solid var(--border);border-radius:3px;font-size:0.84rem;">
+        <option value="above">above</option>
+        <option value="below">below</option>
+        <option value="exactly">exactly</option>
+      </select>
+      <input type="number" id="ucrit_${d.metric}_val" step="any" placeholder="value"
+        style="width:130px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;font-size:0.84rem;">
+    </div>`).join('');
+  setUniverseIqviaEnabled(!!_iqviaToken);
+}
+
+function setUniverseIqviaEnabled(enabled) {
+  document.querySelectorAll('#criteriaRowsU .crit-row[data-iqvia="true"]').forEach(row => {
+    row.style.opacity = enabled ? '1' : '0.45';
+    row.querySelectorAll('input, select').forEach(el => { el.disabled = !enabled; });
+    if (!enabled) {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = false;
+    }
+  });
+  const note = document.getElementById('iqviaCritNoteU');
+  if (note) note.style.display = enabled ? 'none' : 'block';
+}
+
+function collectUniverseCriteria() {
+  const out = [];
+  for (const d of CRITERIA_DEFS) {
+    const cb = document.getElementById(`ucrit_${d.metric}_on`);
+    if (!cb || !cb.checked || cb.disabled) continue;
+    const op = document.getElementById(`ucrit_${d.metric}_op`).value;
+    const raw = document.getElementById(`ucrit_${d.metric}_val`).value;
+    if (raw === '' || raw == null) throw new Error(`Enter a value for "${d.label}" or uncheck it.`);
+    const value = Number(raw);
+    if (!isFinite(value)) throw new Error(`"${d.label}" value must be a number.`);
+    out.push({ metric: d.metric, operator: op, value });
+  }
+  collectExtraCriteria('u', out);
+  return out;
+}
+
+// Tab B IQVIA upload — shares the global _iqviaToken with the Search tab.
+async function uploadIqviaU(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('iqviaStatusU');
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Uploading…';
+  _iqviaToken = null;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/iqvia/upload', { method: 'POST', body: fd });
+    let data;
+    try { data = await resp.json(); } catch (_) { data = {}; }
+    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+    _iqviaToken = data.token;
+    status.style.color = 'var(--muted)';
+    status.textContent = '✓ Loaded';
+    setUniverseIqviaEnabled(true);
+    setIqviaCriteriaEnabled(true);  // keep the Search tab's IQVIA criteria in sync
+  } catch (e) {
+    status.style.color = 'var(--err)';
+    status.textContent = `✗ ${e.message}`;
+    _iqviaToken = null;
+    setUniverseIqviaEnabled(false);
+  }
+}
+
+async function refreshUniverseCacheNote() {
+  const note = document.getElementById('universeCacheNote');
+  if (!note) return;
+  try {
+    const resp = await fetch('/api/universe/status');
+    const s = await resp.json();
+    const base = 'The full-universe dataset is cached for 4 hours. Click <b>Reset cache</b> (on the Search tab) to force a fresh pull from DPD.';
+    if (s && s.cached && s.fresh) {
+      const mins = Math.max(0, Math.round((s.expires_in_seconds || 0) / 60));
+      note.innerHTML = `Cached universe is fresh (${s.dpd_records} products, expires in ~${mins} min). ` + base;
+    } else {
+      note.innerHTML = base;
+    }
+  } catch (e) { /* leave default note */ }
+}
+
+function _setUniverseButtonsDisabled(disabled) {
+  const a = document.getElementById('universeFullBtn');
+  const b = document.getElementById('universeFilterBtn');
+  if (a) a.disabled = disabled;
+  if (b) b.disabled = disabled;
+}
+
+// mode: 'full' (option 3) | 'filter_enrich' (option 4)
+async function doUniverse(mode) {
+  let criteria = [];
+  if (mode === 'filter_enrich') {
+    try {
+      criteria = collectUniverseCriteria();
+    } catch (e) {
+      alert(e.message);
+      document.getElementById('filterBoxU').open = true;
+      return;
+    }
+    if (!criteria.length) {
+      alert('Tick at least one filter criterion (and give it a value) to filter & enrich.');
+      document.getElementById('filterBoxU').open = true;
+      return;
+    }
+  }
+  _exportMode = 'full';  // universe jobs expose a single download_url
+
+  _setUniverseButtonsDisabled(true);
+  const panel = document.getElementById('exportPanel');
+  panel.style.display = 'block';
+  document.getElementById('exportLog').innerHTML = '';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressFill').classList.remove('error');
+  document.getElementById('exportStageLabel').textContent =
+    mode === 'full' ? 'Building full universe (no PDF)…' : 'Filtering universe, then enriching survivors…';
+  document.getElementById('exportStats').textContent = '';
+
+  _closeExport();
+
+  let jobId;
+  try {
+    const body = { mode, enable_ocr: true };
+    if (_iqviaToken) body.iqvia_token = _iqviaToken;
+    if (mode === 'filter_enrich') body.filter_criteria = criteria;
+    const resp = await fetch('/universe/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    jobId = data.job_id;
+    currentJobId = jobId;
+  } catch (e) {
+    document.getElementById('exportStageLabel').textContent = `✗ Error: ${e.message}`;
+    document.getElementById('progressFill').classList.add('error');
+    _setUniverseButtonsDisabled(false);
+    return;
+  }
+
+  const es = new EventSource(`/export/stream/${jobId}`);
+  currentEventSource = es;
+  es.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      _handleExportEvent(data);
+      if (data.status === 'complete' || data.status === 'error') {
+        _setUniverseButtonsDisabled(false);
+        refreshUniverseCacheNote();
+      }
+    } catch (e) {
+      _appendLog(`[parse error] ${event.data}`, 'log-err');
+    }
+  };
+  es.onerror = () => {
+    if (currentJobId !== jobId) return;
+    _appendLog('Connection lost. Check server.', 'log-err');
+    document.getElementById('exportStageLabel').textContent = 'Connection error';
+    _setUniverseButtonsDisabled(false);
+    es.close();
+  };
+}
+
 // ---- Init ----
 buildCriteriaRows();
+buildUniverseCriteriaRows();
+buildExtraCriteria('s', 'extraCriteria');
+buildExtraCriteria('u', 'extraCriteriaU');
 </script>
 </body>
 </html>
