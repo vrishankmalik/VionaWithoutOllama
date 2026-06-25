@@ -102,7 +102,7 @@ def test_compute_products_all_six_exact_values():
 
     cap = products[
         (products["ingredient"] == "PROGESTERONE")
-        & (products["dosage_form"] == "Capsule")
+        & (products["dosage_form"] == "CAPSULE")  # key is case-canonical (upper)
     ]
     assert len(cap) == 1, "Expected exactly one (PROGESTERONE, Capsule) product"
     row = cap.iloc[0]
@@ -122,11 +122,11 @@ def test_compute_products_all_six_exact_values():
 def test_verbatim_dosage_form_is_a_separate_product():
     products, _ = compute_products(_sheet1(), _sheet2())
     forms = set(products["dosage_form"])
-    assert "Capsule" in forms
-    assert "Capsule (extended-release)" in forms, (
+    assert "CAPSULE" in forms
+    assert "CAPSULE (EXTENDED-RELEASE)" in forms, (
         "release-type modifier must never be collapsed into the base form"
     )
-    er = products[products["dosage_form"] == "Capsule (extended-release)"].iloc[0]
+    er = products[products["dosage_form"] == "CAPSULE (EXTENDED-RELEASE)"].iloc[0]
     assert er["competitors"] == 1
     assert er["value_sizeable"] == 500
 
@@ -148,9 +148,9 @@ def test_strength_is_not_part_of_product_key():
     ])
     products, _ = compute_products(s1, pd.DataFrame())
     pairs = set(zip(products["ingredient"], products["dosage_form"]))
-    assert pairs == {("METFORMIN", "Tablet"), ("METFORMIN", "Solution")}
+    assert pairs == {("METFORMIN", "TABLET"), ("METFORMIN", "SOLUTION")}
 
-    tab = products[products["dosage_form"] == "Tablet"].iloc[0]
+    tab = products[products["dosage_form"] == "TABLET"].iloc[0]
     # Three strengths collapsed into one Tablet product: companies A, B (A deduped).
     assert tab["competitors"] == 2
     assert tab["approvals"] == 2
@@ -168,14 +168,14 @@ def test_combo_ingredient_strength_stripped_and_deduped():
     ])
     products, _ = compute_products(s1, pd.DataFrame())
     pairs = set(zip(products["ingredient"], products["dosage_form"]))
-    assert pairs == {("ALPELISIB", "Tablet"), ("ALPELISIB", "Tablet; Kit")}
+    assert pairs == {("ALPELISIB", "TABLET"), ("ALPELISIB", "TABLET; KIT")}
 
 
 def test_unmatched_din_contributes_zero_not_excluded():
     """The cancelled DIN with no IQVIA values adds 0 — it neither inflates nor
     voids the Capsule product's golden sum."""
     products, _ = compute_products(_sheet1(), _sheet2())
-    cap = products[products["dosage_form"] == "Capsule"].iloc[0]
+    cap = products[products["dosage_form"] == "CAPSULE"].iloc[0]
     assert cap["value_sizeable"] == _GOLD_VALUE  # exactly the two matched DINs
 
 
@@ -191,7 +191,7 @@ def test_filter_returns_exactly_expected_products():
     ])
     qualifying = apply_criteria(products, criteria)
     pairs = set(zip(qualifying["ingredient"], qualifying["dosage_form"]))
-    assert pairs == {("PROGESTERONE", "Capsule")}
+    assert pairs == {("PROGESTERONE", "CAPSULE")}
 
 
 def test_filter_below_and_exactly_operators():
@@ -199,11 +199,11 @@ def test_filter_below_and_exactly_operators():
     # exactly 1 competitor → only the ER form
     q = apply_criteria(products, parse_criteria(
         [{"metric": "competitors", "operator": "exactly", "value": 1}]))
-    assert set(q["dosage_form"]) == {"Capsule (extended-release)"}
+    assert set(q["dosage_form"]) == {"CAPSULE (EXTENDED-RELEASE)"}
     # below 2 approvals → only the ER form (1 approval)
     q2 = apply_criteria(products, parse_criteria(
         [{"metric": "approvals", "operator": "below", "value": 2}]))
-    assert set(q2["dosage_form"]) == {"Capsule (extended-release)"}
+    assert set(q2["dosage_form"]) == {"CAPSULE (EXTENDED-RELEASE)"}
 
 
 def test_no_criteria_returns_all_products():
@@ -238,7 +238,7 @@ def test_build_filtered_workbook_two_tabs_and_summary_values():
     assert sws.max_row == 2, "exactly one qualifying product"
     vals = {headers[i]: sws.cell(2, i + 1).value for i in range(len(headers))}
     assert vals["Ingredient"] == "PROGESTERONE"
-    assert vals["Dosage Form"] == "Capsule"
+    assert vals["Dosage Form"] == "CAPSULE"
     assert vals["Number of Competitors"] == 2
     assert vals["Number of Filings"] == 3
     assert vals["Number of Approvals"] == 3

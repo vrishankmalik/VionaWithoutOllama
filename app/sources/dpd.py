@@ -301,11 +301,15 @@ async def search_dpd(
     query: str,
     field: str = "ingredient",
     extra_terms: Optional[list[str]] = None,
+    max_results: Optional[int] = None,
 ) -> SourceResult:
     """
     Search DPD API.
     field: "ingredient" | "brand" | "company" | "din"
     extra_terms: additional normalized synonyms to include
+    max_results: cap on distinct drug codes fetched. None → DPD_MAX_RESULTS
+      (interactive default). The export/enrichment path passes a high value so
+      competitor/approval counts are complete.
     """
     if field == "din":
         # DIN search: look up by drug_identification_number directly
@@ -348,9 +352,13 @@ async def search_dpd(
         if not all_drug_codes:
             return SourceResult(source="DPD", status="no_results", records=[])
 
-        # Cap results to avoid overwhelming the API and timing out on very broad queries
-        codes_to_fetch = list(all_drug_codes)[:DPD_MAX_RESULTS]
-        capped = len(all_drug_codes) > DPD_MAX_RESULTS
+        # Cap results to avoid overwhelming the API and timing out on very broad
+        # queries. Sort first so the kept subset is DETERMINISTic (slicing a set
+        # would drop an arbitrary, run-to-run-varying subset and silently skew
+        # competitor counts).
+        effective_cap = max_results if max_results is not None else DPD_MAX_RESULTS
+        codes_to_fetch = sorted(all_drug_codes)[:effective_cap]
+        capped = len(all_drug_codes) > effective_cap
 
         # For brand/company searches, we still need ingredient rows for display
         # Fetch them lazily via the product endpoint which has brand/company info
@@ -372,7 +380,7 @@ async def search_dpd(
     if capped:
         result.total_matches = len(all_drug_codes)
         result.error_message = (
-            f"Showing first {DPD_MAX_RESULTS} of {len(all_drug_codes)} matching products. "
+            f"Showing first {effective_cap} of {len(all_drug_codes)} matching products. "
             f"Use a more specific term to see all results."
         )
     return result

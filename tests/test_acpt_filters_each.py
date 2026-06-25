@@ -151,7 +151,7 @@ def test_competitors_above():
     wb = _open(xlsx)
     _assert_shell(wb)
     # Capsule has 2 marketed competitors (>1); ER form has 1 (not >1).
-    assert _summary_products(wb) == {("PROGESTERONE", "Capsule")}
+    assert _summary_products(wb) == {("PROGESTERONE", "CAPSULE")}
     assert _summary_value(wb, "Number of Competitors") == 2
     assert _detail_dins(wb) == {"02516187", "02493578", "09999999"}
 
@@ -162,7 +162,7 @@ def test_competitors_below():
     wb = _open(xlsx)
     _assert_shell(wb)
     # only the ER form has competitors (1) below 2.
-    assert _summary_products(wb) == {("PROGESTERONE", "Capsule (extended-release)")}
+    assert _summary_products(wb) == {("PROGESTERONE", "CAPSULE (EXTENDED-RELEASE)")}
     assert _detail_dins(wb) == {"02505223"}
 
 
@@ -171,7 +171,7 @@ def test_competitors_exactly():
     xlsx, *_ = build_filtered_workbook(_sheet1_iqvia(), _sheet2_progesterone(), crit)
     wb = _open(xlsx)
     _assert_shell(wb)
-    assert _summary_products(wb) == {("PROGESTERONE", "Capsule")}
+    assert _summary_products(wb) == {("PROGESTERONE", "CAPSULE")}
     assert _detail_dins(wb) == {"02516187", "02493578", "09999999"}
 
 
@@ -186,8 +186,8 @@ def test_filings_above_uses_sheet2():
     wb = _open(xlsx)
     _assert_shell(wb)
     assert _summary_products(wb) == {
-        ("PROGESTERONE", "Capsule"),
-        ("PROGESTERONE", "Capsule (extended-release)"),
+        ("PROGESTERONE", "CAPSULE"),
+        ("PROGESTERONE", "CAPSULE (EXTENDED-RELEASE)"),
     }
     # filings come from Sheet 2 (3 progesterone GSUR rows; metformin excluded).
     assert _summary_value(wb, "Number of Filings") == 3
@@ -202,8 +202,8 @@ def test_filings_exactly_zero_when_no_sheet2():
     wb = _open(xlsx)
     _assert_shell(wb)
     assert _summary_products(wb) == {
-        ("PROGESTERONE", "Capsule"),
-        ("PROGESTERONE", "Capsule (extended-release)"),
+        ("PROGESTERONE", "CAPSULE"),
+        ("PROGESTERONE", "CAPSULE (EXTENDED-RELEASE)"),
     }
     assert _summary_value(wb, "Number of Filings") == 0
 
@@ -218,7 +218,7 @@ def test_approvals_above():
     xlsx, *_ = build_filtered_workbook(_sheet1_iqvia(), _sheet2_progesterone(), crit)
     wb = _open(xlsx)
     _assert_shell(wb)
-    assert _summary_products(wb) == {("PROGESTERONE", "Capsule")}
+    assert _summary_products(wb) == {("PROGESTERONE", "CAPSULE")}
     assert _summary_value(wb, "Number of Approvals") == 3
     assert _detail_dins(wb) == {"02516187", "02493578", "09999999"}
 
@@ -233,7 +233,7 @@ def test_value_above_golden_sum():
     xlsx, *_ = build_filtered_workbook(_sheet1_iqvia(), _sheet2_progesterone(), crit)
     wb = _open(xlsx)
     _assert_shell(wb)
-    assert _summary_products(wb) == {("PROGESTERONE", "Capsule")}
+    assert _summary_products(wb) == {("PROGESTERONE", "CAPSULE")}
     assert _summary_value(wb, "Value Sizeable ($)") == _GOLD_VALUE
     assert _detail_dins(wb) == {"02516187", "02493578", "09999999"}
 
@@ -243,7 +243,7 @@ def test_quantity_above_golden_sum():
     xlsx, *_ = build_filtered_workbook(_sheet1_iqvia(), _sheet2_progesterone(), crit)
     wb = _open(xlsx)
     _assert_shell(wb)
-    assert _summary_products(wb) == {("PROGESTERONE", "Capsule")}
+    assert _summary_products(wb) == {("PROGESTERONE", "CAPSULE")}
     assert _summary_value(wb, "Quantity Sizeable (Units)") == _GOLD_UNITS
     assert _detail_dins(wb) == {"02516187", "02493578", "09999999"}
 
@@ -254,7 +254,7 @@ def test_quantity_ext_above_golden_sum():
     wb = _open(xlsx)
     _assert_shell(wb)
     # Capsule ext = 300 (>100); ER ext = 1 (not >100).
-    assert _summary_products(wb) == {("PROGESTERONE", "Capsule")}
+    assert _summary_products(wb) == {("PROGESTERONE", "CAPSULE")}
     assert _summary_value(wb, "Quantity Ext Sizeable") == _GOLD_EXT
     assert _detail_dins(wb) == {"02516187", "02493578", "09999999"}
 

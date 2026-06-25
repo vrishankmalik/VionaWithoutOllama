@@ -372,7 +372,16 @@ def _ingredient_label(key: tuple[str, ...]) -> str:
 
 
 def _dosage_form_key(dosage_form: Any) -> str:
-    """Verbatim dosage form (whitespace-trimmed only) — modifiers preserved."""
+    """Canonical product-key form: whitespace-collapsed and UPPER-cased, with
+    modifiers preserved (so ``Tablet (Extended-Release)`` stays distinct from
+    ``Tablet``).
+
+    Upper-casing uses the SAME case rule as ``base_dosage_form`` so the two DPD
+    sources — the bulk extract (``TABLET``) and the live REST API (``Tablet``) —
+    collapse into one product instead of splitting and under-counting
+    competitors. Case is the only thing normalized here; release-type and other
+    modifiers are kept (that is what ``base_dosage_form`` strips, not this key).
+    """
     if dosage_form is None:
         return ""
     try:
@@ -380,7 +389,7 @@ def _dosage_form_key(dosage_form: Any) -> str:
             return ""
     except (TypeError, ValueError):
         pass
-    return re.sub(r"\s+", " ", str(dosage_form).strip())
+    return re.sub(r"\s+", " ", str(dosage_form).strip()).upper()
 
 
 def _molecule_tokens(ingredient: Any) -> frozenset[str]:

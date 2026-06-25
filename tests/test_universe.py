@@ -173,7 +173,7 @@ def test_six_criteria_compute_no_pdf(monkeypatch):
     sheet2 = pd.DataFrame([{"medicinal_ingredient": "progesterone", "company": "GenA"}])
 
     products, _w = screen.compute_products(sheet1, sheet2)
-    row = products[products["dosage_form"] == "Capsule"].iloc[0]
+    row = products[products["dosage_form"] == "CAPSULE"].iloc[0]  # key is case-canonical
     # All six computed, including the three IQVIA-sized ones — no PDF involved.
     assert row["competitors"] == 2
     assert row["filings"] == 1

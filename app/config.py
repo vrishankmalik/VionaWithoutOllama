@@ -10,10 +10,19 @@ NORMALIZE_SALT_FORMS = bool(int(os.getenv("NORMALIZE_SALT_FORMS", "0")))
 # No localhost dependency; all optional config via env vars.
 
 # Concurrency / timeouts
-DPD_SEMAPHORE = int(os.getenv("DPD_SEMAPHORE", "10"))
-SOURCE_TIMEOUT = float(os.getenv("SOURCE_TIMEOUT", "60.0"))  # seconds per source
-# Cap DPD results when an ingredient matches hundreds of products
+DPD_SEMAPHORE = int(os.getenv("DPD_SEMAPHORE", "20"))
+SOURCE_TIMEOUT = float(os.getenv("SOURCE_TIMEOUT", "60.0"))  # seconds per source (interactive UI)
+# Per-source budget for the async export/enrichment job. The export runs in the
+# background with a progress bar, so it can afford a longer wait than the
+# interactive search — this lets big ingredients (e.g. metformin, 242 DINs)
+# finish their full uncapped DPD fetch in one pass instead of timing out.
+EXPORT_SOURCE_TIMEOUT = float(os.getenv("EXPORT_SOURCE_TIMEOUT", "300.0"))  # seconds
+# Cap DPD results for the INTERACTIVE search when an ingredient matches hundreds
+# of products (a human is waiting; the UI shows a "first N of M" notice).
 DPD_MAX_RESULTS = int(os.getenv("DPD_MAX_RESULTS", "150"))
+# Export/enrichment path: effectively uncapped so competitor/approval counts are
+# complete. A high ceiling remains only as a runaway-query backstop.
+DPD_EXPORT_MAX_RESULTS = int(os.getenv("DPD_EXPORT_MAX_RESULTS", "5000"))
 
 # Cache
 CACHE_DIR = os.getenv("CACHE_DIR", "/tmp/canadian_drug_db_cache")

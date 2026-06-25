@@ -1116,9 +1116,10 @@ if __name__ == "__main__":
         from app.enrichment.data_protection import fetch_data_protection_table
         from datetime import datetime, timezone
 
+        from app.config import DPD_EXPORT_MAX_RESULTS
         canonical, extra_terms = await normalize_query(_args.q, _args.field)
         sources = await asyncio.gather(
-            search_dpd(canonical, _args.field, extra_terms),
+            search_dpd(canonical, _args.field, extra_terms, max_results=DPD_EXPORT_MAX_RESULTS),
             search_generic_submissions(canonical, _args.field, extra_terms),
             search_noc(canonical, _args.field, extra_terms),
             search_patent_register(canonical, _args.field, extra_terms),

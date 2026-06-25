@@ -38,7 +38,12 @@ from typing import Optional
 
 import pandas as pd
 
-from app.config import ENABLE_OCR, LABELING_STORE_TTL, SOURCE_TIMEOUT
+from app.config import (
+    ENABLE_OCR,
+    LABELING_STORE_TTL,
+    EXPORT_SOURCE_TIMEOUT,
+    DPD_EXPORT_MAX_RESULTS,
+)
 from app.consistency import check_cross_source_consistency
 from app.enrichment.data_protection import fetch_data_protection_table
 from app.enrichment.labeling import enrich_labeling_batch_fast
@@ -106,11 +111,11 @@ async def _search_one_product(
 
     async def _timed_source(coro, source_name: str) -> SourceResult:
         try:
-            return await asyncio.wait_for(coro, timeout=SOURCE_TIMEOUT)
+            return await asyncio.wait_for(coro, timeout=EXPORT_SOURCE_TIMEOUT)
         except asyncio.TimeoutError:
             return SourceResult(
                 source=source_name, status="timeout",
-                error_message=f"Timed out after {SOURCE_TIMEOUT}s",
+                error_message=f"Timed out after {EXPORT_SOURCE_TIMEOUT}s",
             )
         except Exception as exc:
             return SourceResult(
@@ -138,7 +143,7 @@ async def _search_one_product(
         return result
 
     await asyncio.gather(
-        _do_source("DPD",               search_dpd(canonical, "ingredient", extra_terms)),
+        _do_source("DPD",               search_dpd(canonical, "ingredient", extra_terms, max_results=DPD_EXPORT_MAX_RESULTS)),
         _do_source("GenericSubmissions", search_generic_submissions(canonical, "ingredient", extra_terms)),
         _do_source("NOC",               search_noc(canonical, "ingredient", extra_terms)),
         _do_source("PatentRegister",    search_patent_register(canonical, "ingredient", extra_terms)),
